@@ -1,0 +1,6 @@
+{
+  "tool": "built-in image_gen",
+  "file": "nightmare-atlas.png",
+  "layout": "2x2 transparent atlas: suppressed pistol, double-barrel shotgun, flashlight, equipment case",
+  "prompt": "Use case: stylized-concept. Asset type: production photorealistic horror videogame transparent equipment sprite atlas. ONE square image, exactly 2 by 2 equal square cells, no gutters, no borders. Each object isolated on genuine transparent background and fully contained within its own cell with generous 15 percent empty margin. Exact layout: top left a realistic black tactical semiautomatic pistol with long attached sound suppressor, visible slide machining, textured grip, scratched steel, side view muzzle pointing left; top right a realistic break-action double-barrel shotgun with two barrels, walnut wooden stock, worn engraved steel receiver, side view muzzle pointing left; bottom left an industrial black handheld flashlight, knurled aluminum body, glass reflector and warm white illuminated lens, three-quarter view lens pointing upper left; bottom right a closed olive military equipment case with metal latches, worn corners and canvas handle. Consistent neutral studio lighting, highly detailed PBR metal, wood and rubber materials, sharp readable silhouettes, no shadows outside own cell. No words, labels, grid lines, scenery, watermark, hands or people."
+}

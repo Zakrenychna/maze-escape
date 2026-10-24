@@ -10,6 +10,7 @@
 <div class="game-container">
     <div class="mode-picker" aria-label="Choose game mode">
         <button id="regularMode" aria-pressed="true"><span>🎮 REGULAR MODE</span><small>Safe room, weapon shop, maze, and boss</small></button>
+        <button id="nightmareMode" aria-pressed="false"><span>☠ NIGHTMARE</span><small>Pitch black · flashlight only · radar offline</small></button>
         <button id="halloweenMode" aria-pressed="false"><span>🎃 HALLOWEEN MODE</span><small>Open yard, scarecrow, haunted house, and ghost</small></button>
         <button id="tornadoMode" aria-pressed="false" hidden><span>🌪️ TORNADO RUN</span><small>Find three supply crates, then reach the car</small></button>
         <button id="tsunamiMode" aria-pressed="false" hidden><span>🌊 TSUNAMI ESCAPE</span><small>Race the rising wave to the high ground</small></button>
@@ -18,13 +19,13 @@
         <div class="armory-heading">
             <div>
                 <h2>SAFE ROOM · WEAPON BENCH</h2>
-                <p>Earn 35–100 credits for monster kills and 200 for escaping. Wallet and purchases persist.</p>
+                <p>Explore +20 · salvage +30 · puzzles +45–80 · escape +200. Gear, credits and medkits persist.</p>
             </div>
             <div class="armory-balance">💰 <span id="armoryMoney">0</span> CREDITS</div>
         </div>
         <div class="armory-briefing">
             <strong>RADIO LOG · 02:17 AM</strong>
-            <span>Four fragments power the red exit lock. The thing beyond it guards the car key—and the road home. If you hear movement in the walls, keep moving.</span>
+            <span>Restore the generator, then the medical water filter. Recover four code fragments to unlock evacuation. Optional room puzzles fund better equipment. Your knife always works; no ammunition purchases required.</span>
         </div>
         <div class="weapon-shop">
             <button type="button" data-shop-weapon="knife"></button>
@@ -40,18 +41,35 @@
             <button type="button" data-shop-weapon="carbine"></button>
             <button type="button" data-shop-weapon="cryo"></button>
             <button type="button" data-shop-weapon="handcannon"></button>
+            <button type="button" data-shop-weapon="silenced"></button>
+            <button type="button" data-shop-weapon="doublebarrel"></button>
         </div>
         <h3 class="upgrade-heading">FIELD UPGRADES · permanent between runs</h3>
         <div class="upgrade-shop">
             <button type="button" data-shop-upgrade="armor"></button>
             <button type="button" data-shop-upgrade="boots"></button>
         </div>
+        <h3 class="upgrade-heading">FIELD SUPPLIES</h3>
+        <button type="button" id="buyMedkit">FIRST AID · 55 CREDITS <small>Restore 40 HP with H · carry up to 5 · kept between runs</small></button>
         <div class="armory-footer">
             <span>Choose a weapon, then click, press G, or use SPACE to attack. Press V to cycle owned weapons.</span>
             <button type="button" id="enterMazeBtn">ENTER THE MAZE →</button>
         </div>
     </section>
     <canvas id="gameCanvas" width="720" height="450"></canvas>
+    <div id="interactionHint" class="interaction-hint" role="status" aria-live="polite"></div>
+    <div class="mission-toolbar">
+        <span id="missionProgress"></span>
+        <button type="button" id="flashlightBtn" aria-pressed="false">FLASHLIGHT OFF · T</button>
+        <button type="button" id="useMedkit">FIRST AID <span id="medkitCount">1</span> · H</button>
+        <button type="button" id="journalBtn" aria-expanded="false" aria-controls="missionJournal">JOURNAL · J</button>
+    </div>
+    <section id="missionJournal" class="mission-journal" hidden>
+        <h2>EVACUATION JOURNAL</h2>
+        <p>1. Repair the generator. 2. Restore water in the medical lab. 3. Collect all four guarded fragments. 4. Enter their digits in HUD order at the red exit. Defeat the boss, take the key and reach the car.</p>
+        <p>Amber objects are puzzle terminals: approach and press E. Copper bundles sell for 30 credits with E. First visits pay 20; each cache and puzzle pays once per run. Hints cost 15 credits once per puzzle; wrong answers are free. The world pauses while a puzzle is open.</p>
+        <ul id="journalRooms"></ul>
+    </section>
     <div class="movement-pad" role="group" aria-label="Hold to move and turn">
         <button type="button" data-movement-key="w" aria-label="Move forward">▲</button>
         <button type="button" data-movement-key="a" aria-label="Turn left">◀</button>
@@ -72,7 +90,8 @@
         <span><kbd>W</kbd><kbd>S</kbd> move · <kbd>A</kbd><kbd>D</kbd> turn</span>
         <span><kbd>E</kbd> interact / hide · <kbd>SPACE</kbd> attack with equipped weapon</span>
         <span><kbd>CLICK</kbd> / <kbd>G</kbd> attack · <kbd>V</kbd> switch weapons</span>
-        <span><kbd>L</kbd> +1,000 credits</span>
+        <span><kbd>J</kbd> journal · <kbd>H</kbd> first aid</span>
+        <span><kbd>T</kbd> toggle flashlight</span>
         <span><kbd>F</kbd> use car</span>
         <span><kbd>SHIFT</kbd> sprint</span>
         <span><kbd>5</kbd> secret weapon animation</span>
@@ -81,7 +100,7 @@
     <div class="field-notes" aria-label="Mission details and survival tips">
         <section>
             <h2>Regular · The lock</h2>
-            <p>Collect all four glowing code fragments in the maze and reach the red exit. Solve its quick check, defeat the boss outside, find the car key, then get to the car.</p>
+            <p>Restore the generator and medical filter. Collect four guarded code fragments, then enter their digits at the red exit. Defeat the boss, find the car key and reach the car. Eight rooms contain puzzles and salvage.</p>
         </section>
         <section>
             <h2>Halloween · The hunt</h2>
@@ -97,7 +116,7 @@
         </section>
         <section>
             <h2>Field tips · Survive</h2>
-            <p>Health pickups restore 25 points; ⚡ boosts speed for 6.5 seconds. Buy reinforced armor or sprint modules in the safe room. Press <strong>E</strong> at a closet to hide. The office corridors lead to six furnished rooms, but hunters patrol inside and chase you out. Watch the radar, use cover, and fight back for credits. Find the faded yellow wall, then follow the green radar marker. The gold ? marks a note—press <strong>E</strong> near it to read the clue. Enter <strong>1234</strong> at the green keypad to claim the lightsaber. Move with <strong>WASD</strong>, attack with <strong>CLICK</strong>/<strong>G</strong>/<strong>SPACE</strong>, switch weapons with <strong>V</strong>, and use the car with <strong>F</strong>.</p>
+            <p>Health pickups restore 25 points; ⚡ boosts speed for 6.5 seconds. Buy reinforced armor or sprint modules in the safe room. Press <strong>E</strong> at a closet to hide. The office corridors lead to eight furnished rooms, but hunters patrol inside and chase you out. Watch the radar, use cover, and fight back for credits. Find the faded yellow wall, then follow the green radar marker. The gold ? marks a note—press <strong>E</strong> near it to read the clue. Enter <strong>1234</strong> at the green keypad to claim the lightsaber. Move with <strong>WASD</strong>, attack with <strong>CLICK</strong>/<strong>G</strong>/<strong>SPACE</strong>, switch weapons with <strong>V</strong>, and use the car with <strong>F</strong>.</p>
         </section>
     </div>
 </div>
@@ -125,6 +144,7 @@
         <p id="puzzleFeedback" role="status" aria-live="polite"></p>
         <div class="puzzle-actions">
             <button type="submit">UNLOCK</button>
+            <button type="button" id="puzzleHint" hidden>HINT · 15 CREDITS</button>
             <button type="button" id="puzzleCancel">CANCEL</button>
         </div>
     </form>

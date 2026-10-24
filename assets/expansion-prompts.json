@@ -1,0 +1,12 @@
+{
+  "tool": "built-in image_gen",
+  "layout": "4x4 equal cells; transparent PNG; row-major indices",
+  "expansion": {
+    "file": "expansion-atlas.png",
+    "prompt": "Use case: stylized-concept. Asset type: production horror videogame transparent sprite atlas. Generate ONE square 4 by 4 grid of 16 equal square cells, no gutters or borders. Photorealistic 3D PBR abandoned hospital props, front three-quarter view, each centered fully within its own cell with 12 percent empty margin, isolated on genuine transparent background. Consistent neutral studio lighting, readable silhouettes, realistic rust, dust, scratches and glass. Exact row-major arrangement: row 1: old diesel generator; open electrical fuse panel with three switches; metal hospital bed with dirty mattress; microscope. Row 2: steel water filtration tank with pipes; red handwheel valve; heavy steel combination safe; old rotary telephone. Row 3: brass pocket compass; bundle of copper scrap wire; small blue electrical fuse; worn brown journal. Row 4: military submachine gun; wood-stock pump shotgun; stainless revolver; compact sci-fi frost blaster. No text, no labels, no scenery, no floor planes, no drop shadows outside cells, no overlapping objects, no watermark. Every object distinct and physically believable."
+  },
+  "weapons": {
+    "file": "weapons-atlas.png",
+    "prompt": "Use case: stylized-concept. Asset type: realistic horror game weapon inventory sprite atlas, ONE square image with exactly 4 columns and 4 rows of equal square cells. Each cell a single centered object on genuinely transparent background, full silhouette fully inside its cell, 12 percent margin, no overlapping adjacent cells. Photorealistic PBR aged metal, worn wood, realistic leather and scratches. Consistent neutral studio lighting. Exact row-major layout: row1 combat knife, semiautomatic pistol, wood-stock pump shotgun, compact military submachine gun. row2 large stainless revolver, futuristic purple plasma rifle, futuristic cyan rotary laser minigun, glowing blue energy sword with metal hilt. row3 tactical crossbow, fuel-tank flamethrower, modern military carbine rifle, futuristic frost blaster with ice canister. row4 heavy large-bore hand cannon pistol, canvas backpack, red gasoline jerry can, portable flashlight. Side three-quarter view inventory models. NO words, labels, borders, checkerboard, floor, scene or watermark."
+  }
+}

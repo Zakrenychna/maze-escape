@@ -15,12 +15,24 @@ body {
     overflow-y: auto;
 }
 .game-container {
+    max-width: 100%;
     background: #0d0d0d;
     padding: 18px;
     border-radius: 24px;
     box-shadow: 0 0 40px #500, 0 0 80px #200;
     border: 2px solid #3a1a1a;
 }
+.interaction-hint { min-height: 28px; padding: 8px 4px 0; text-align: center; color: #efd198; font-size: .78rem; }
+.mission-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; max-width: 960px; margin: 10px auto; color: #9ac7b2; font-size: .75rem; }
+.mission-toolbar button { font-size: .72rem; padding: 8px 12px; }
+.mission-journal { max-width: 960px; padding: 20px; margin: 12px auto; border: 1px solid #756341; border-radius: 12px; color: #c8bfab; background: #181913; font-size: .82rem; line-height: 1.7; }
+.mission-journal[hidden] { display: none; }
+.mission-journal h2 { font-size: 1rem; color: #eed29d; }
+.mission-journal p { margin: 8px 0; }
+.mission-journal ul { padding-left: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 20px; }
+#buyMedkit small { display: block; margin-top: 5px; font-weight: normal; letter-spacing: 0; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid #e8ce83; outline-offset: 3px; }
 canvas {
     display: block;
     width: min(960px, 92vw);
@@ -158,6 +170,9 @@ button:active {
 .mode-picker button small { margin-top:4px; color:#c3a9a0; font-size:.72rem; font-weight:normal; letter-spacing:0; }
 .mode-picker button[aria-pressed="true"] { background:#6a2a2a; color:#fff; box-shadow:0 0 14px #a33; border-color:#ff9c70; }
 .halloween .game-container { border-color:#70401d; box-shadow:0 0 40px #a50,0 0 80px #420; }
+.nightmare .game-container { border-color: #37314c; box-shadow: 0 0 40px #211332, 0 0 80px #10091c; }
+#nightmareMode[aria-pressed="true"] { background: #292036; border-color: #b598df; box-shadow: 0 0 18px #73558d; }
+#flashlightBtn[aria-pressed="true"] { color: #fff0be; border-color: #cfb476; background: #39301e; }
 .armory-panel[hidden] { display:none; }
 .armory-panel {
     max-width:960px; margin:0 auto 14px; padding:16px;
@@ -174,6 +189,7 @@ button:active {
 .weapon-shop, .upgrade-shop { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; }
 .weapon-shop button { min-height:82px; padding:10px; border-radius:10px; letter-spacing:0; }
 .weapon-shop button small { display:block; margin-top:5px; color:#cbbba0; font-weight:normal; line-height:1.35; }
+.weapon-art { display: block; width: 76px; height: 76px; margin: 0 auto 6px; background-image: url('assets/weapons-atlas.png'); background-size: 400% 400%; background-repeat: no-repeat; }
 .weapon-shop button:disabled { cursor:default; opacity:.62; }
 .upgrade-heading { margin:14px 0 8px; color:#b8dba8; font-size:.85rem; letter-spacing:1px; }
 .upgrade-shop button { min-height:72px; padding:9px; border-color:#5c8c4d; background:#1b2a19; color:#d5f4c9; letter-spacing:0; }
