@@ -265,7 +265,7 @@
     const WEAPON_COOLDOWN = 3.5;
     const STUN_DURATION = 2.8;
     const PROGRESS_KEY = 'maze-house-progress-v1';
-    const WEAPON_PRICES = { knife: 0, pistol: 80, shotgun: 150, smg: 220, revolver: 300, plasma: 250, laser: 500, crossbow: 340, flamethrower: 420 };
+    const WEAPON_PRICES = { knife: 0, pistol: 80, shotgun: 150, smg: 220, revolver: 300, plasma: 250, laser: 500, crossbow: 340, flamethrower: 420, carbine: 280, cryo: 380, handcannon: 460 };
     const WEAPON_DEFS = {
         knife: { label: 'KNIFE', cooldown: 0.55, damage: 40, range: 1.65, aim: 0.72, description: 'Free · close-range', color: '#dfe7ee', icon: '🔪' },
         pistol: { label: 'PISTOL', cooldown: 3.5, damage: 20, range: 8, aim: 0.2, effect: 'stun', description: 'Stuns maze enemies', color: '#dfe7ee', icon: '🔫' },
@@ -276,7 +276,10 @@
         laser: { label: 'LASER MINIGUN', cooldown: 0.18, damage: 9999, range: 12, aim: 0.28, description: 'Extreme damage', color: '#7de5ff', icon: '⚡' },
         lightsaber: { label: 'LIGHTSABER', cooldown: 0.7, damage: 150, range: 2.5, aim: 0.65, description: 'Secret green-door reward', color: '#55dfff', icon: '⚔️' },
         crossbow: { label: 'CROSSBOW', cooldown: 1.35, damage: 145, range: 16, aim: 0.13, description: 'Long-range, precise bolt', color: '#bd9365', icon: '🏹' },
-        flamethrower: { label: 'FLAMETHROWER', cooldown: 0.32, damage: 42, range: 4.8, aim: 0.72, description: 'Wide cone, close-range burn', color: '#ff8a42', icon: '🔥' }
+        flamethrower: { label: 'FLAMETHROWER', cooldown: 0.32, damage: 42, range: 4.8, aim: 0.72, description: 'Wide cone, close-range burn', color: '#ff8a42', icon: '🔥' },
+        carbine: { label: 'CARBINE', cooldown: 0.42, damage: 38, range: 14, aim: 0.2, description: 'Quick, accurate mid-range fire', color: '#a9d58b', icon: '🔫' },
+        cryo: { label: 'CRYO BLASTER', cooldown: 1.65, damage: 12, range: 8, aim: 0.48, effect: 'stun', description: 'Freezes a target in place', color: '#8beaff', icon: '❄️' },
+        handcannon: { label: 'HAND CANNON', cooldown: 1.35, damage: 115, range: 7, aim: 0.24, description: 'Massive close-range impact', color: '#ff786b', icon: '💥' }
     };
     const UPGRADE_PRICES = { armor: [180, 360], boots: [140, 280] };
     const UPGRADE_DEFS = {
@@ -954,6 +957,7 @@
         const activeWeapon = player.weapon in WEAPON_DEFS ? player.weapon : 'pistol';
         const weaponInfo = WEAPON_DEFS[activeWeapon];
         weaponCooldown = weaponInfo.cooldown;
+        muzzleFlash = 0.11;
         screenShake = 0.35;
 
         const enemyList = [];
@@ -1023,6 +1027,7 @@
             }
         } else {
             target.entity.stunTimer = STUN_DURATION;
+            target.entity.cryoFrozen = activeWeapon === 'cryo';
             if (target.type === 'monster' && target.entity.state) target.entity.state = 'stunned';
             message = `${weaponInfo.icon} ${target.label} stunned!`;
         }
@@ -2047,7 +2052,86 @@
             ctx.fillRect(gunX - 58, gunY - 6, 28, 12);
             ctx.fillRect(gunX - 22, gunY - 30, 22, 10);
 
-            if (player.weapon === 'shotgun') {
+            if (player.weapon === 'lightsaber') {
+                ctx.save();
+                ctx.shadowColor = '#42dfff';
+                ctx.shadowBlur = 22;
+                ctx.fillStyle = '#303a45';
+                ctx.fillRect(gunX + 20, gunY - 10, 22, 60);
+                ctx.fillStyle = '#b7c8d1';
+                ctx.fillRect(gunX + 14, gunY + 4, 34, 8);
+                ctx.fillStyle = '#4de7ff';
+                ctx.fillRect(gunX + 27, gunY - 150, 8, 146);
+                ctx.fillStyle = '#e4ffff';
+                ctx.fillRect(gunX + 29, gunY - 145, 4, 136);
+                ctx.restore();
+            } else if (player.weapon === 'cryo') {
+                ctx.save();
+                ctx.shadowColor = '#38cfff';
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = '#087da9';
+                ctx.fillRect(gunX - 86, gunY - 22, 108, 36);
+                ctx.fillStyle = '#19b9e8';
+                ctx.fillRect(gunX - 58, gunY - 34, 54, 13);
+                ctx.fillRect(gunX + 18, gunY - 10, 112, 18);
+                ctx.fillStyle = '#aaf3ff';
+                ctx.fillRect(gunX + 32, gunY - 5, 82, 6);
+                ctx.beginPath();
+                ctx.arc(gunX - 30, gunY - 4, 10 + Math.sin(performance.now() / 130) * 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else if (player.weapon === 'pistol') {
+                ctx.fillStyle = '#252e38';
+                ctx.fillRect(gunX - 44, gunY - 19, 105, 27);
+                ctx.fillStyle = '#81909b';
+                ctx.fillRect(gunX + 39, gunY - 13, 64, 9);
+                ctx.fillStyle = '#111820';
+                ctx.fillRect(gunX - 10, gunY + 7, 26, 38);
+                ctx.fillStyle = '#cfb66d';
+                ctx.fillRect(gunX + 3, gunY - 17, 18, 4);
+            } else if (player.weapon === 'plasma') {
+                ctx.save();
+                ctx.shadowColor = '#bd68ff';
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = '#44245f';
+                ctx.fillRect(gunX - 76, gunY - 25, 126, 43);
+                ctx.fillStyle = '#9e4de0';
+                ctx.fillRect(gunX + 25, gunY - 14, 104, 22);
+                ctx.fillStyle = '#edbdff';
+                ctx.beginPath();
+                ctx.arc(gunX - 23, gunY - 4, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else if (player.weapon === 'laser') {
+                ctx.save();
+                ctx.shadowColor = '#37eaff';
+                ctx.shadowBlur = 16;
+                ctx.fillStyle = '#173d4a';
+                ctx.fillRect(gunX - 88, gunY - 20, 165, 34);
+                ctx.fillStyle = '#2ccfe8';
+                ctx.fillRect(gunX - 28, gunY - 34, 47, 13);
+                ctx.fillRect(gunX + 45, gunY - 10, 91, 12);
+                ctx.fillStyle = '#c8ffff';
+                ctx.fillRect(gunX + 42, gunY - 6, 88, 4);
+                ctx.restore();
+            } else if (player.weapon === 'carbine') {
+                ctx.fillStyle = '#344536';
+                ctx.fillRect(gunX - 82, gunY - 21, 128, 38);
+                ctx.fillStyle = '#91bf73';
+                ctx.fillRect(gunX - 23, gunY - 29, 42, 9);
+                ctx.fillRect(gunX + 36, gunY - 8, 102, 10);
+                ctx.fillStyle = '#202a24';
+                ctx.fillRect(gunX - 24, gunY + 14, 24, 38);
+            } else if (player.weapon === 'handcannon') {
+                ctx.fillStyle = '#512b2a';
+                ctx.fillRect(gunX - 67, gunY - 28, 112, 54);
+                ctx.fillStyle = '#d45c54';
+                ctx.fillRect(gunX + 26, gunY - 17, 112, 26);
+                ctx.fillStyle = '#ffb19a';
+                ctx.fillRect(gunX + 34, gunY - 12, 84, 7);
+                ctx.fillStyle = '#281b20';
+                ctx.fillRect(gunX - 17, gunY + 22, 35, 34);
+            } else if (player.weapon === 'shotgun') {
                 ctx.fillStyle = '#79583c';
                 ctx.fillRect(gunX - 102, gunY + 8, 56, 15);
                 ctx.fillStyle = '#aeb9bd';
@@ -2091,13 +2175,113 @@
             }
 
             if (muzzleFlash > 0) {
-                ctx.fillStyle = 'rgba(255, 228, 135, 0.96)';
-                ctx.beginPath();
-                ctx.moveTo(gunX + 88, gunY + 2);
-                ctx.lineTo(gunX + 138, gunY + 10);
-                ctx.lineTo(gunX + 88, gunY + 18);
-                ctx.closePath();
-                ctx.fill();
+                const flash = Math.min(1, muzzleFlash / 0.09);
+                const muzzleX = gunX + 126;
+                const muzzleY = gunY + 4;
+                const effectColor = player.weapon === 'cryo' ? '#8beaff'
+                    : player.weapon === 'plasma' || player.weapon === 'laser' ? '#d6a5ff'
+                    : player.weapon === 'flamethrower' ? '#ff6a24'
+                    : player.weapon === 'carbine' || player.weapon === 'smg' ? '#b9e88c'
+                    : player.weapon === 'handcannon' || player.weapon === 'shotgun' ? '#ffb45c'
+                    : player.weapon === 'crossbow' ? '#e4d4a0' : '#fff0a6';
+                ctx.save();
+                ctx.globalAlpha = flash;
+                ctx.shadowColor = effectColor;
+                ctx.shadowBlur = player.weapon === 'laser' || player.weapon === 'plasma' ? 26 : 15;
+                ctx.fillStyle = effectColor;
+                if (player.weapon === 'lightsaber') {
+                    ctx.strokeStyle = '#9ff7ff';
+                    ctx.lineWidth = 12;
+                    ctx.shadowBlur = 28;
+                    ctx.beginPath();
+                    ctx.arc(gunX + 26, gunY + 2, 85, -1.1, 0.85);
+                    ctx.stroke();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+                } else if (player.weapon === 'laser') {
+                    ctx.fillRect(muzzleX - 6, muzzleY - 7, 48, 14);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(muzzleX, muzzleY - 3, 44, 6);
+                } else if (player.weapon === 'plasma' || player.weapon === 'cryo') {
+                    ctx.beginPath();
+                    ctx.arc(muzzleX + 13, muzzleY, player.weapon === 'cryo' ? 15 : 18, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(muzzleX + 13, muzzleY, 7, 0, Math.PI * 2);
+                    ctx.stroke();
+                } else if (player.weapon === 'revolver') {
+                    ctx.beginPath();
+                    ctx.arc(muzzleX + 10, muzzleY, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff5d1';
+                    ctx.lineWidth = 3;
+                    for (let ray = 0; ray < 8; ray++) {
+                        const angle = ray * Math.PI / 4;
+                        ctx.beginPath();
+                        ctx.moveTo(muzzleX + 10 + Math.cos(angle) * 15, muzzleY + Math.sin(angle) * 15);
+                        ctx.lineTo(muzzleX + 10 + Math.cos(angle) * 27, muzzleY + Math.sin(angle) * 27);
+                        ctx.stroke();
+                    }
+                } else if (player.weapon === 'smg' || player.weapon === 'carbine') {
+                    const burstColor = player.weapon === 'carbine' ? '#d9ffc0' : '#fff1bb';
+                    ctx.strokeStyle = burstColor;
+                    ctx.lineWidth = player.weapon === 'carbine' ? 4 : 3;
+                    for (let round = -1; round <= 1; round++) {
+                        ctx.beginPath();
+                        ctx.moveTo(muzzleX, muzzleY + round * 6);
+                        ctx.lineTo(muzzleX + (player.weapon === 'carbine' ? 48 : 32), muzzleY + round * 11);
+                        ctx.stroke();
+                    }
+                } else if (player.weapon === 'flamethrower') {
+                    for (let flame = 0; flame < 4; flame++) {
+                        const spread = (flame - 1.5) * 8;
+                        ctx.beginPath();
+                        ctx.moveTo(muzzleX, muzzleY + spread * 0.25);
+                        ctx.quadraticCurveTo(muzzleX + 24, muzzleY + spread - 18, muzzleX + 45, muzzleY + spread);
+                        ctx.quadraticCurveTo(muzzleX + 20, muzzleY + spread + 12, muzzleX, muzzleY + spread * 0.25);
+                        ctx.fill();
+                    }
+                } else if (player.weapon === 'crossbow') {
+                    ctx.fillRect(muzzleX - 2, muzzleY - 3, 55, 6);
+                    ctx.beginPath();
+                    ctx.moveTo(muzzleX + 54, muzzleY);
+                    ctx.lineTo(muzzleX + 42, muzzleY - 7);
+                    ctx.lineTo(muzzleX + 42, muzzleY + 7);
+                    ctx.fill();
+                } else if (player.weapon === 'handcannon') {
+                    ctx.beginPath();
+                    ctx.arc(muzzleX + 17, muzzleY, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#fff4d0';
+                    ctx.beginPath();
+                    ctx.arc(muzzleX + 17, muzzleY, 9, 0, Math.PI * 2);
+                    ctx.fill();
+                    for (let spark = 0; spark < 5; spark++) {
+                        const angle = spark * Math.PI * 2 / 5;
+                        ctx.fillRect(muzzleX + 23 + Math.cos(angle) * 23, muzzleY + Math.sin(angle) * 18, 5, 5);
+                    }
+                } else {
+                    const width = player.weapon === 'shotgun' ? 56 : 38;
+                    const spread = player.weapon === 'shotgun' ? 19 : 8;
+                    ctx.beginPath();
+                    ctx.moveTo(muzzleX, muzzleY - spread * 0.35);
+                    ctx.lineTo(muzzleX + width, muzzleY);
+                    ctx.lineTo(muzzleX, muzzleY + spread * 0.35);
+                    ctx.closePath();
+                    ctx.fill();
+                    if (player.weapon === 'shotgun') {
+                        for (let pellet = -1; pellet <= 1; pellet++) {
+                            ctx.globalAlpha = flash * 0.8;
+                            ctx.beginPath();
+                            ctx.arc(muzzleX + 28, muzzleY + pellet * 9, 2.5, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                }
+                ctx.restore();
             }
         }
 
@@ -2457,31 +2641,34 @@
             const floor = materials[3];
             const directionX = Math.cos(player.angle), directionY = Math.sin(player.angle);
             const plane = Math.tan(fov / 2);
-            for (let y = Math.ceil(horizon + 1); y < h; y += 2) {
+            for (let y = Math.ceil(horizon + 1); y < h; y += 3) {
                 const distance = h * 0.41 / (y - horizon);
                 if (distance > 20) continue;
-                for (let x = 0; x < w; x += 4) {
+                for (let x = 0; x < w; x += 6) {
                     const camera = (x / w - 0.5) * 2 * plane;
                     const worldX = player.x + distance * (directionX - directionY * camera);
                     const worldY = player.y + distance * (directionY + directionX * camera);
                     const u = worldX - Math.floor(worldX), v = worldY - Math.floor(worldY);
-                    ctx.drawImage(floor, u * (floor.width - 1), v * (floor.height - 1), 1, 1, x, y, 4, 2);
+                    ctx.drawImage(floor, u * (floor.width - 1), v * (floor.height - 1), 1, 1, x, y, 6, 3);
                 }
                 ctx.fillStyle = `rgba(0,0,0,${Math.min(0.93, 0.48 + distance * 0.035)})`;
-                ctx.fillRect(0, y, w, 2);
+                ctx.fillRect(0, y, w, 3);
             }
         }
+        const forwardX = Math.cos(player.angle), forwardY = Math.sin(player.angle);
+        const cameraPlane = Math.tan(fov / 2);
         for (let sx = 0; sx < w; sx++) {
             const camera = (sx / w - 0.5) * 2;
-            const rayAngle = player.angle + Math.atan(camera * Math.tan(fov / 2));
-            const rx = Math.cos(rayAngle), ry = Math.sin(rayAngle);
+            const rayPlane = camera * cameraPlane;
+            const rx = forwardX - forwardY * rayPlane;
+            const ry = forwardY + forwardX * rayPlane;
             let tx = Math.floor(player.x), ty = Math.floor(player.y);
             const ddx = Math.abs(1 / (rx || 0.00001)), ddy = Math.abs(1 / (ry || 0.00001));
             const stepX = rx < 0 ? -1 : 1, stepY = ry < 0 ? -1 : 1;
             let sideX = (rx < 0 ? player.x - tx : tx + 1 - player.x) * ddx;
             let sideY = (ry < 0 ? player.y - ty : ty + 1 - player.y) * ddy;
             let side = 0, cell = 0, dist = 30;
-            for (let i = 0; i < 80; i++) {
+            for (let i = 0; i < 48; i++) {
                 if (sideX < sideY) { sideX += ddx; tx += stepX; side = 0; }
                 else { sideY += ddy; ty += stepY; side = 1; }
                 // Empty floor is 0, so don't use `|| 1` here: that made every
@@ -2491,7 +2678,6 @@
             }
             const wallCoordinate = side === 0 ? player.y + dist * ry : player.x + dist * rx;
             const wallU = wallCoordinate - Math.floor(wallCoordinate);
-            dist *= Math.cos(rayAngle - player.angle);
             depth[sx] = dist;
             const wallH = Math.min(h * 1.5, h * 0.82 / Math.max(0.12, dist));
             const top = horizon - wallH / 2;
@@ -2637,16 +2823,17 @@
         if (worldMode === 'outside' && gameMode === 'halloween') {
             ghosts.filter(g => g.active).forEach(g => things.push({x:g.x,y:g.y,icon:'👻',size:.82,glow:'#bdfcff',hasEyes:true}));
         }
-        if (worldMode === 'house' && gameMode==='regular' && gameState === 'playing' && !player.inCloset && monster.active) things.push({x:monster.x,y:monster.y,icon:monster.stunTimer>0?'💫':'👹',size:.78,glow:'#ff1717',hasEyes:true});
-        if (worldMode === 'house' && gameMode==='regular' && gameState === 'playing' && !player.inCloset) stalkers.filter(s => s.active).forEach(s => things.push({x:s.x,y:s.y,icon:s.stunTimer>0?'💫':'👾',size:.7,glow:s.color,hasEyes:true}));
+        if (worldMode === 'house' && gameMode==='regular' && gameState === 'playing' && !player.inCloset && monster.active) things.push({x:monster.x,y:monster.y,icon:monster.stunTimer>0?'💫':'👹',size:.78,glow:monster.cryoFrozen && monster.stunTimer > 0 ? '#55cfff' : '#ff1717',hasEyes:true,cryoFrozen:monster.cryoFrozen && monster.stunTimer > 0});
+        if (worldMode === 'house' && gameMode==='regular' && gameState === 'playing' && !player.inCloset) stalkers.filter(s => s.active).forEach(s => things.push({x:s.x,y:s.y,icon:s.stunTimer>0?'💫':'👾',size:.7,glow:s.cryoFrozen && s.stunTimer > 0 ? '#55cfff' : s.color,hasEyes:true,cryoFrozen:s.cryoFrozen && s.stunTimer > 0}));
         if (worldMode === 'house' && gameMode === 'regular' && gameState === 'playing' && !player.inCloset) {
             roomHunters.filter(hunter => hunter.active).forEach(hunter => things.push({
                 x: hunter.x,
                 y: hunter.y,
                 icon: hunter.stunTimer > 0 ? '💫' : '👹',
                 size: 0.78,
-                glow: hunter.color,
-                hasEyes: true
+                glow: hunter.cryoFrozen && hunter.stunTimer > 0 ? '#55cfff' : hunter.color,
+                hasEyes: true,
+                cryoFrozen: hunter.cryoFrozen && hunter.stunTimer > 0
             }));
         }
         if (worldMode === 'house' && map[EXIT_POS.y][EXIT_POS.x] === 2) things.push({x:EXIT_POS.x+.5,y:EXIT_POS.y+.5,icon:'🚪',size:.68,glow:'#ff2525'});
@@ -3010,6 +3197,17 @@
                 ctx.fillStyle = '#ff3d46';
                 ctx.fillRect(x - eyeW * 2.2, spriteY - eyeH * 1.3, eyeW, eyeH);
                 ctx.fillRect(x + eyeW * 0.8, spriteY - eyeH * 1.3, eyeW, eyeH);
+            }
+            if (obj.cryoFrozen) {
+                const squareSize = size * 1.08;
+                ctx.fillStyle = 'rgba(35, 174, 255, 0.34)';
+                ctx.fillRect(x - squareSize / 2, spriteY - squareSize / 2, squareSize, squareSize);
+                ctx.strokeStyle = '#8beaff';
+                ctx.lineWidth = Math.max(2, size * 0.035);
+                ctx.shadowColor = '#38bfff';
+                ctx.shadowBlur = Math.max(8, size * 0.18);
+                ctx.strokeRect(x - squareSize / 2, spriteY - squareSize / 2, squareSize, squareSize);
+                ctx.shadowBlur = 0;
             }
             ctx.shadowBlur=0; ctx.globalAlpha=1;
         }
