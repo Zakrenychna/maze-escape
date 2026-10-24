@@ -339,7 +339,7 @@
             homeX: room.enemy.x,
             homeY: room.enemy.y,
             angle: index * Math.PI / 2,
-            speed: 1.45 + index * 0.12,
+            speed: 1.45 + index * 0.12 + (campaignLevel - 1) * 0.2,
             hp: 72,
             maxHp: 72,
             stunTimer: 0,
@@ -593,6 +593,12 @@
     let worldMode = 'house';
     let selectedMode = 'regular';
     let gameMode = 'regular';
+    let campaignLevel = 1;
+    let coOpEnabled = false;
+    let coOpPlayer = null;
+    const coOpKeys = { up: false, down: false, left: false, right: false };
+    let frozenFloodTimer = 0;
+    let damageGraceTimer = 0;
     let nightmareMode = false;
     let flashlightOn = false;
     let challengeMode = null;
@@ -704,7 +710,7 @@
     function resetSurvival() {
         survival = { items: { scrap: 0, tool: 1, lockpick: 0, trap: 0, bottle: 2, ammo: 48, battery: 2, documents: 0 },
             crouched: false, uv: false, battery: 100, hiddenBed: false, gunMods: clone(ownedGunMods), loaded: {}, reload: 0,
-            noise: null, objects: [], creatures: [], traps: [], eventClock: 35, event: '', eventLife: 0,
+            noise: null, objects: [], creatures: [], traps: [], eventClock: campaignLevel === 3 ? 19 : 35, event: '', eventLife: 0,
             blackout: 0, elapsed: 0, rescued: false, transmitted: false, notes: [],
             contracts: { documents: false, clean: false, rescue: false }, roomDamage: [], roomEntryHealth: {} };
         if (gameMode === 'regular') {
@@ -719,12 +725,18 @@
                 const room = MAZE_ROOMS[index];
                 survival.objects.push({ id: `note-${index}`, kind: 'note', room: index, x: room.x + 4.5, y: room.y + 4.4, used: false, decor: 'journal', icon: '📜', size: .38 });
             }
+            for (const [index, relic] of [[2, 'Amber eye'], [7, 'Glass heart'], [10, 'Ashen crown']]) {
+                const room = MAZE_ROOMS[index];
+                survival.objects.push({ id: `relic-${index}`, kind: 'relic', room: index, x: room.x + 4.15, y: room.y + 4.15, used: false, decor: 'artifact', icon: '💎', label: relic, size: .32 });
+            }
             const theatre = MAZE_ROOMS[9];
             survival.objects.push({ id: 'survivor', kind: 'survivor', room: 9, x: theatre.x + 4.4, y: theatre.y + 3.5, used: false, decor: 'hospitalBed', icon: '🩹', size: .8 });
-            for (const [index, kind] of [[8, 'blind'], [12, 'shy']]) {
+            for (const [index, kind] of [[8, 'blind'], [12, 'shy'], [4, 'ambusher'], [10, 'spitter']]) {
                 const room = MAZE_ROOMS[index];
                 survival.creatures.push({ x: room.x + 4.5, y: room.y + 4.5, homeX: room.x + 4.5, homeY: room.y + 4.5,
-                    kind, active: true, hp: 110, maxHp: 110, stunTimer: 0, speed: kind === 'blind' ? 2.4 : 2.9, angle: 0, searchTimer: 0, soundTimer: 0 });
+                    kind, active: true, hp: 110, maxHp: 110, stunTimer: 0,
+                    speed: kind === 'blind' ? 2.4 : kind === 'ambusher' ? 3.6 : 2.9,
+                    angle: 0, searchTimer: 0, soundTimer: 0, attackTimer: 1.5, target: null });
             }
         }
         previousHealth = player.health;
@@ -873,7 +885,9 @@
             near.x = nx; near.y = ny; near.moved = true; emitNoise(nx, ny, 6, 'door'); notify('Furniture moved. It blocks movement and can be pushed again.');
         } else if (near.kind === 'door') {
             const point = roomEntrance(MAZE_ROOMS[near.room]);
-            if (near.jammed) {
+            if (near.cryoSealTimer > 0) {
+                notify(`Door frozen shut for ${Math.ceil(near.cryoSealTimer)} more seconds.`);
+            } else if (near.jammed) {
                 if (!survival.items.tool && !survival.items.lockpick) { notify('Need a tool kit or lockpick to release the jam. It clears after the event.'); return true; }
                 if (!survival.items.tool) survival.items.lockpick--;
                 near.jammed = false; map[point.y][point.x] = 0; notify('Door mechanism released.');
@@ -896,6 +910,12 @@
             if (near.room === 11 && audioEnabled && window.speechSynthesis && window.SpeechSynthesisUtterance) {
                 window.speechSynthesis.speak(new window.SpeechSynthesisUtterance(notes[near.room]));
             }
+        } else if (near.kind === 'relic') {
+            near.used = true;
+            money += 100;
+            saveProgress(); updateArmoryUI();
+            notify(`Secret found: ${near.label}. +100 credits.`);
+            playSound('radio', near.x, near.y);
         } else if (near.kind === 'survivor') {
             if (!medkits) { notify('The patient needs one medkit.'); return true; }
             medkits--; survival.rescued = true; near.used = true; notify('Patient stabilized. They will meet you at the evacuation car.'); saveProgress();
@@ -904,9 +924,11 @@
     }
 
     function hurtPlayer(amount) {
+        if (damageGraceTimer > 0 || player.health <= 0) return;
         const index = currentRoomIndex();
         if (survival && index >= 0 && amount > 0 && !survival.roomDamage.includes(index)) survival.roomDamage.push(index);
         player.health = Math.max(0, player.health - amount);
+        damageGraceTimer = 1.1;
         if (!player.health) gameState = 'lost';
     }
 
@@ -972,6 +994,15 @@
                 survival.event = '';
                 for (const door of survival.objects.filter(object => object.jammed)) { const point = roomEntrance(MAZE_ROOMS[door.room]); door.jammed = false; map[point.y][point.x] = 0; }
             }
+            for (const door of survival.objects) {
+                if (door.cryoSealTimer > 0) {
+                    door.cryoSealTimer = Math.max(0, door.cryoSealTimer - dt);
+                    if (!door.cryoSealTimer && !door.jammed && !door.barricaded) {
+                        const point = roomEntrance(MAZE_ROOMS[door.room]);
+                        map[point.y][point.x] = 0;
+                    }
+                }
+            }
             const moving = !player.inCloset && (keys.w || keys.s);
             soundClock -= dt;
             if (moving && soundClock <= 0) {
@@ -1010,6 +1041,7 @@
     function updateSpecialCreatures(dt) {
         for (const enemy of survival.creatures) {
             if (!enemy.active) continue;
+            enemy.spitFlash = Math.max(0, (enemy.spitFlash || 0) - dt);
             enemy.stunTimer = Math.max(0, enemy.stunTimer - dt);
             if (enemy.stunTimer > 0) continue;
             const dx = player.x - enemy.x, dy = player.y - enemy.y, distance = Math.hypot(dx, dy);
@@ -1021,13 +1053,35 @@
                 if (noise && Math.hypot(noise.x - enemy.x, noise.y - enemy.y) <= noise.radius) { enemy.target = { x: noise.x, y: noise.y }; enemy.searchTimer = 6; }
                 enemy.searchTimer = Math.max(0, enemy.searchTimer - dt);
                 target = enemy.searchTimer > 0 ? enemy.target : { x: enemy.homeX + Math.sin(survival.elapsed * .5) * .4, y: enemy.homeY };
+            } else if (enemy.kind === 'ambusher') {
+                if (!player.inCloset && distance < (survival.crouched ? 5 : 10) && lineOfSight(enemy.x, enemy.y, player.x, player.y)) {
+                    enemy.target = { x: player.x, y: player.y };
+                    enemy.searchTimer = 3;
+                }
+                enemy.searchTimer = Math.max(0, enemy.searchTimer - dt);
+                target = enemy.searchTimer > 0 ? enemy.target : { x: enemy.homeX, y: enemy.homeY };
+            } else if (enemy.kind === 'spitter') {
+                enemy.attackTimer = Math.max(0, (enemy.attackTimer || 0) - dt);
+                if (!player.inCloset && distance < 9 && lineOfSight(enemy.x, enemy.y, player.x, player.y)) {
+                    enemy.angle = Math.atan2(dy, dx);
+                    if (enemy.attackTimer <= 0) {
+                        hurtPlayer(11);
+                        enemy.attackTimer = 2.6;
+                        enemy.spitFlash = 0.18;
+                        playSound('gun', enemy.x, enemy.y);
+                        message = 'The spitter hit you from range!'; messageTimer = 1.2;
+                    }
+                }
+                target = { x: enemy.homeX, y: enemy.homeY };
             } else if (illuminated) {
                 target = { x: enemy.x - dx, y: enemy.y - dy };
             } else if (!player.inCloset && distance < (survival.crouched ? 3 : 8) && lineOfSight(enemy.x, enemy.y, player.x, player.y)) target = player;
             if (target && Math.hypot(target.x - enemy.x, target.y - enemy.y) > .2) {
                 const next = enemy.kind === 'shy' && illuminated ? target : findNextPathPosition(enemy.x, enemy.y, target.x, target.y);
                 if (next) {
-                    const length = Math.hypot(next.x - enemy.x, next.y - enemy.y) || 1, step = Math.min(enemy.speed * dt, length);
+                    const length = Math.hypot(next.x - enemy.x, next.y - enemy.y) || 1;
+                    const dash = enemy.kind === 'ambusher' && enemy.searchTimer > 0 ? 1.65 : 1;
+                    const step = Math.min(enemy.speed * dash * dt, length);
                     const nx = enemy.x + (next.x - enemy.x) / length * step, ny = enemy.y + (next.y - enemy.y) / length * step;
                     if (canMoveTo(nx, enemy.y, .25)) enemy.x = nx;
                     if (canMoveTo(enemy.x, ny, .25)) enemy.y = ny;
@@ -1035,8 +1089,8 @@
             }
             enemy.soundTimer -= dt;
             if (enemy.soundTimer <= 0) { playSound('breath', enemy.x, enemy.y); enemy.soundTimer = 2.4; }
-            if (distance < .8 && !player.inCloset && !(enemy.kind === 'shy' && illuminated)) {
-                hurtPlayer(22 * dt); if (!player.health) gameState = 'lost';
+            if (distance < .8 && !player.inCloset && !(enemy.kind === 'shy' && illuminated) && enemy.kind !== 'spitter') {
+                hurtPlayer((enemy.kind === 'ambusher' ? 18 : 12) * dt); if (!player.health) gameState = 'lost';
             }
         }
         for (const trap of survival.traps.filter(trap => trap.active)) {
@@ -1074,7 +1128,7 @@
             list(data.guards, 4) && data.guards.length === 4 && list(data.boosts, 64) && data.boosts.every(point) && list(data.pickups, 32) && data.pickups.every(point) &&
             ['stalkers', 'hunters', 'guards'].every(key => list(data[key], 20) && data[key].every(enemy => point(enemy) && Number.isFinite(enemy.hp))) &&
             ['solved', 'discovered', 'salvaged', 'hinted'].every(key => list(data[key], 13) && data[key].every(index => Number.isInteger(index) && index >= 0 && index < 13)) &&
-            data.survival && list(data.survival.objects, 80) && data.survival.objects.every(object => point(object) && ['drawer', 'glass', 'furniture', 'door', 'note', 'survivor'].includes(object.kind) && Number.isInteger(object.room) && object.room >= 0 && object.room < 13) &&
+            data.survival && list(data.survival.objects, 80) && data.survival.objects.every(object => point(object) && ['drawer', 'glass', 'furniture', 'door', 'note', 'relic', 'survivor'].includes(object.kind) && Number.isInteger(object.room) && object.room >= 0 && object.room < 13) &&
             list(data.survival.creatures, 8) && data.survival.creatures.every(enemy => point(enemy) && Number.isFinite(enemy.hp) && Number.isFinite(enemy.speed)) &&
             list(data.survival.traps, 50) && data.survival.traps.every(point) && list(data.survival.notes, 8) && data.survival.notes.every(note => typeof note === 'string' && note.length < 1000) &&
             data.survival.items && Object.keys(ITEM_NAMES).every(key => Number.isSafeInteger(data.survival.items[key]) && data.survival.items[key] >= 0 && data.survival.items[key] <= 999) &&
@@ -1227,15 +1281,92 @@
         return player.hasCode.every(v => v === true);
     }
 
+    function remainingMazeMonsters() {
+        let remaining = monster.active ? 1 : 0;
+        for (const group of [stalkers, roomHunters, keyGuards, survival?.creatures || []]) {
+            for (const enemy of group) if (enemy.active !== false) remaining++;
+        }
+        return remaining;
+    }
+
+    function exitDoorReady() {
+        return gameMode === 'regular' && worldMode === 'house' && hasFullCode() && remainingMazeMonsters() === 0;
+    }
+
+    function updateExitObjective() {
+        if (gameMode !== 'regular' || worldMode !== 'house' || !hasFullCode()) return;
+        const remaining = remainingMazeMonsters();
+        document.getElementById('objective').textContent = remaining
+            ? `all code found → defeat ${remaining} more monster${remaining === 1 ? '' : 's'} to light the exit door`
+            : 'all monsters defeated → the exit door is shining; return and enter the code to escape';
+    }
+
     function currentRoomIndex() {
         if (worldMode !== 'house' || gameMode !== 'regular') return -1;
         return MAZE_ROOMS.findIndex(room => player.x > room.x && player.x < room.x + 5 &&
             player.y > room.y && player.y < room.y + 5);
     }
 
+    function updateCoOpPlayer(dt) {
+        const coopStatus = coOpEnabled && coOpPlayer ? `P2 ${Math.ceil(coOpPlayer.health)} HP · ${WEAPON_DEFS[coOpPlayer.weapon]?.label || 'KNIFE'}` : '';
+        const statusElement = document.getElementById('coOpStatus');
+        if (statusElement.textContent !== coopStatus) statusElement.textContent = coopStatus;
+        if (!coOpEnabled || !coOpPlayer || gameState !== 'playing') return;
+        coOpPlayer.cooldown = Math.max(0, coOpPlayer.cooldown - dt);
+        coOpPlayer.weapon = player.weapon;
+        coOpPlayer.maxHealth = player.maxHealth;
+        if (coOpPlayer.health > coOpPlayer.maxHealth) coOpPlayer.health = coOpPlayer.maxHealth;
+        if (coOpKeys.left) coOpPlayer.angle -= 2.2 * dt;
+        if (coOpKeys.right) coOpPlayer.angle += 2.2 * dt;
+        let move = (coOpKeys.up ? 1 : 0) - (coOpKeys.down ? 1 : 0);
+        if (!move) return;
+        const speed = coOpKeys.down ? coOpPlayer.speed * 0.7 : coOpPlayer.speed;
+        const dx = Math.cos(coOpPlayer.angle) * speed * dt * move;
+        const dy = Math.sin(coOpPlayer.angle) * speed * dt * move;
+        if (canMoveTo(coOpPlayer.x + dx, coOpPlayer.y, 0.25)) coOpPlayer.x += dx;
+        if (canMoveTo(coOpPlayer.x, coOpPlayer.y + dy, 0.25)) coOpPlayer.y += dy;
+        tryPickupFragments(coOpPlayer);
+    }
+
+    function attackCoOpPlayer() {
+        if (!coOpEnabled || !coOpPlayer || gameState !== 'playing' || coOpPlayer.cooldown > 0) return;
+        const weapon = WEAPON_DEFS[coOpPlayer.weapon] || WEAPON_DEFS.knife;
+        if (survival && !isMelee(coOpPlayer.weapon)) {
+            if (survival.reload > 0) return;
+            const loaded = survival.loaded[coOpPlayer.weapon] ?? magazineSize(coOpPlayer.weapon);
+            if (!loaded) { notify('Partner magazine empty. Reload with B.'); return; }
+            survival.loaded[coOpPlayer.weapon] = loaded - 1;
+            emitNoise(coOpPlayer.x, coOpPlayer.y, coOpPlayer.weapon === 'silenced' ? 3 : 14, 'gun');
+            updateSurvivalUI(false);
+        }
+        coOpPlayer.cooldown = weapon.cooldown;
+        const enemies = [];
+        if (worldMode === 'house' && gameMode === 'regular') enemies.push(monster, ...stalkers, ...roomHunters, ...keyGuards, ...(survival?.creatures || []));
+        if (worldMode === 'outside' && boss.hp > 0) enemies.push(boss);
+        let target = null, nearest = Infinity;
+        for (const enemy of enemies) {
+            if (enemy.active === false || enemy.stunTimer > 0) continue;
+            const dx = enemy.x - coOpPlayer.x, dy = enemy.y - coOpPlayer.y;
+            const distance = Math.hypot(dx, dy);
+            let angle = Math.atan2(dy, dx) - coOpPlayer.angle;
+            while (angle > Math.PI) angle -= Math.PI * 2;
+            while (angle < -Math.PI) angle += Math.PI * 2;
+            if (distance > weapon.range || Math.abs(angle) > weapon.aim || distance >= nearest || !lineOfSight(coOpPlayer.x, coOpPlayer.y, enemy.x, enemy.y)) continue;
+            nearest = distance; target = enemy;
+        }
+        if (!target) { notify('Partner missed. Turn with the arrow keys and press ENTER to fire.'); return; }
+        if (target === boss) damageBoss(weapon.damage);
+        else if (weapon.effect === 'stun') { target.stunTimer = STUN_DURATION; target.cryoFrozen = coOpPlayer.weapon === 'cryo'; }
+        else {
+            target.hp = Math.max(0, (target.hp || 0) - weapon.damage);
+            if (!target.hp) { target.active = false; awardMoney(35, 'partner assist'); updateExitObjective(); }
+        }
+        playSound('gun', coOpPlayer.x, coOpPlayer.y);
+    }
+
     function updateJournal() {
         document.getElementById('missionProgress').textContent =
-            `POWER ${solvedRooms.has(7) ? 'ON' : 'OFF'} · WATER ${solvedRooms.has(6) ? 'CLEAN' : 'OFFLINE'} · PUZZLES ${solvedRooms.size}/${MAZE_ROOMS.length}`;
+            `LEVEL ${campaignLevel}/3 · ${campaignLevel === 1 ? 'NIGHT SHIFT' : campaignLevel === 2 ? 'FLOODED ANNEX' : 'BLACKOUT WING'} · POWER ${solvedRooms.has(7) ? 'ON' : 'OFF'} · WATER ${solvedRooms.has(6) ? 'CLEAN' : 'OFFLINE'} · PUZZLES ${solvedRooms.size}/${MAZE_ROOMS.length}`;
         document.getElementById('journalRooms').replaceChildren(...MAZE_ROOMS.map((room, index) => {
             const row = document.createElement('li');
             row.textContent = `${solvedRooms.has(index) ? '✓' : discoveredRooms.has(index) ? '◉' : '○'} ${room.name} · ${ROOM_PUZZLES[index].reward} credits${index === 7 ? ' · restore power first' : index === 6 ? ' · restore water after power' : ' · optional cache'}`;
@@ -1498,6 +1629,8 @@
     }
 
     function resetGame(startInArmory = true) {
+        frozenFloodTimer = 0;
+        damageGraceTimer = 0;
         solvedRooms.clear();
         discoveredRooms.clear();
         salvagedRooms.clear();
@@ -1554,7 +1687,7 @@
         };
         monster = {
             x: 26.5, y: 27.5, angle: Math.PI,
-            speed: 2.1,
+            speed: 1.8 + (campaignLevel - 1) * 0.12,
             hp: 120,
             maxHp: 120,
             active: true,
@@ -1609,11 +1742,33 @@
             document.getElementById('monsterState').textContent = '👹 UNAWARE';
             document.getElementById('objective').textContent = 'find 4 code fragments → solve the red door puzzle → escape';
         }
+        coOpPlayer = coOpEnabled ? {
+            x: player.x + 0.75, y: player.y + 0.35, angle: player.angle,
+            health: player.maxHealth, maxHealth: player.maxHealth, speed: player.speed,
+            weapon: player.weapon, cooldown: 0, active: true
+        } : null;
+        if (coOpPlayer && !canMoveTo(coOpPlayer.x, coOpPlayer.y, 0.25)) {
+            coOpPlayer.x = player.x - 0.75;
+            coOpPlayer.y = player.y - 0.35;
+        }
+        document.getElementById('coOpMode').setAttribute('aria-pressed', String(coOpEnabled));
+        document.getElementById('nextLevelBtn').hidden = true;
         resetSurvival();
         updateArmoryUI();
         updateDisasterModeButtons();
         updateJournal();
         document.getElementById('interactionHint').textContent = '';
+    }
+
+    function startNextLevel() {
+        if (gameState !== 'won' || gameMode !== 'regular' || campaignLevel >= 3) return;
+        campaignLevel++;
+        resetGame(true);
+        message = campaignLevel === 2
+            ? 'LEVEL 2 · FLOODED ANNEX. The lower halls are slick; freeze the tunnel water with Cryo.'
+            : 'LEVEL 3 · BLACKOUT WING. The hunters are faster and the boss is stronger.';
+        messageTimer = 5;
+        document.getElementById('objective').textContent = `level ${campaignLevel} safe room → gear up, then enter the new maze`;
     }
 
     function makeHalloweenYard() {
@@ -1723,7 +1878,8 @@
         document.getElementById('monsterState').textContent = '👾 BOSS ACTIVE';
         document.getElementById('monsterState').className = '';
         document.getElementById('weaponStatus').textContent = '🔫 READY';
-        boss = { x: 25.5, y: 24.5, angle: Math.PI, hp: 1000, maxHp: 1000, speed: 1.3, stunTimer: 0 };
+        const bossHealth = 1000 + (campaignLevel - 1) * 350;
+        boss = { x: 25.5, y: 24.5, angle: Math.PI, hp: bossHealth, maxHp: bossHealth, speed: 1.3 + (campaignLevel - 1) * 0.22, stunTimer: 0 };
         bossPhase = 1;
         document.getElementById('objective').textContent = 'defeat the boss → find the car key 🔑 → escape';
         message = 'Boss fight! Click or press G to shoot.';
@@ -1794,15 +1950,54 @@
         messageTimer = 3;
     }
 
+    function grantBossReward(type) {
+        if (type === 'weapon') {
+            const rewardWeapon = campaignLevel === 1 ? 'crossbow' : campaignLevel === 2 ? 'doublebarrel' : 'laser';
+            if (!ownedWeapons[rewardWeapon]) {
+                ownedWeapons[rewardWeapon] = true;
+                player.weapons[rewardWeapon] = true;
+                saveProgress();
+                updateArmoryUI();
+                return `${WEAPON_DEFS[rewardWeapon].label} unlocked as a boss reward!`;
+            }
+            money += 180;
+            saveProgress();
+            updateArmoryUI();
+            return 'Boss reward: +180 credits for your arsenal!';
+        }
+
+        const upgrade = ownedUpgrades.armor < 2 ? 'armor' : ownedUpgrades.boots < 2 ? 'boots' : null;
+        if (!upgrade) {
+            money += 250;
+            saveProgress();
+            updateArmoryUI();
+            return 'Boss reward: +250 credits!';
+        }
+        ownedUpgrades[upgrade]++;
+        if (upgrade === 'armor') {
+            player.maxHealth = 100 + ownedUpgrades.armor * 25;
+            player.health = Math.min(player.maxHealth, player.health + 25);
+        } else {
+            player.speed = 3 + ownedUpgrades.boots * 0.35;
+            player.sprintSpeed = 5.4 + ownedUpgrades.boots * 0.5;
+        }
+        saveProgress();
+        updateArmoryUI();
+        document.getElementById('health').textContent = Math.floor(player.health);
+        return `${UPGRADE_DEFS[upgrade].label} upgraded as a boss reward!`;
+    }
+
     function damageBoss(damage) {
         boss.hp = Math.max(0, boss.hp - damage);
         if (boss.hp > 0) return;
         if (gameMode === 'regular' && bossPhase === 1) {
             awardMoney(35, 'boss form defeated');
             bossPhase = 2;
-            boss = { x: 25.5, y: 24.5, angle: Math.PI, hp: 300, maxHp: 300, speed: 1.75, stunTimer: 0 };
+            const fragmentHealth = 300 + (campaignLevel - 1) * 120;
+            boss = { x: 25.5, y: 24.5, angle: Math.PI, hp: fragmentHealth, maxHp: fragmentHealth, speed: 1.75 + (campaignLevel - 1) * 0.25, stunTimer: 0 };
             message = 'The boss split apart! Its smaller pieces are still coming!';
             document.getElementById('objective').textContent = 'phase 2: destroy the boss fragments → find the car key 🔑 → escape';
+            message = grantBossReward('weapon');
         } else if (gameMode === 'halloween') {
             awardMoney(60, 'scarecrow defeated');
             halloweenStage = 'enter-house';
@@ -1815,7 +2010,7 @@
                 ? 'boss defeated → reach the car 🚗 → press F'
                 : 'boss defeated → find the car key 🔑 → escape';
             document.getElementById('monsterState').textContent = '👾 BOSS DOWN';
-            message = 'Boss fragments destroyed! Find the car key!';
+            message = grantBossReward('upgrade') || 'Boss fragments destroyed! Find the car key!';
         }
         messageTimer = 2;
     }
@@ -1830,7 +2025,7 @@
         screenShake = 0.35;
 
         const enemyList = [];
-        if (gameMode === 'regular' && worldMode === 'house') enemyList.push(...survival.creatures.map(entity => ({ entity, label: entity.kind === 'blind' ? 'Blind hunter' : 'Light-shy creature', type: 'special' })));
+        if (gameMode === 'regular' && worldMode === 'house') enemyList.push(...survival.creatures.map(entity => ({ entity, label: ({ blind: 'Blind hunter', shy: 'Light-shy creature', ambusher: 'Ambusher', spitter: 'Spitter' })[entity.kind] || 'Creature', type: 'special' })));
         if (gameMode === 'regular' && worldMode === 'house' && monster.active) enemyList.push({ entity: monster, label: 'Hunter', type: 'monster' });
         if (gameMode === 'regular' && worldMode === 'house') enemyList.push(...stalkers.map(entity => ({ entity, label: 'Stalker', type: 'stalker' })));
         if (gameMode === 'regular' && worldMode === 'house') enemyList.push(...roomHunters.map(entity => ({ entity, label: entity.name, type: 'roomHunter' })));
@@ -1862,6 +2057,31 @@
             .sort((a, b) => a.distance - b.distance);
 
         if (!targets.length) {
+            if (activeWeapon === 'cryo' && worldMode === 'house' &&
+                ((currentRoomIndex() === 12 && !solvedRooms.has(12)) || (campaignLevel === 2 && player.y > MAP_H * 0.55))) {
+                frozenFloodTimer = 10;
+                message = 'CRYO BLAST · tunnel water frozen for 10 seconds!';
+                messageTimer = 2;
+                return;
+            }
+            if (activeWeapon === 'cryo' && survival) {
+                const door = survival.objects.find(object => {
+                    if (object.kind !== 'door' || object.barricaded || object.jammed || object.cryoSealTimer > 0) return false;
+                    const dx = object.x - player.x, dy = object.y - player.y;
+                    let angle = Math.atan2(dy, dx) - player.angle;
+                    while (angle > Math.PI) angle -= Math.PI * 2;
+                    while (angle < -Math.PI) angle += Math.PI * 2;
+                    return Math.hypot(dx, dy) < 2.6 && Math.abs(angle) < 0.65 && lineOfSight(player.x, player.y, object.x, object.y);
+                });
+                if (door) {
+                    const point = roomEntrance(MAZE_ROOMS[door.room]);
+                    door.cryoSealTimer = 8;
+                    map[point.y][point.x] = 7;
+                    message = 'CRYO SEAL · doorway frozen shut for 8 seconds!';
+                    messageTimer = 2;
+                    return;
+                }
+            }
             message = `${weaponInfo.icon} No target in range`;
             messageTimer = 1.5;
             return;
@@ -1888,12 +2108,14 @@
                         document.getElementById('monsterState').textContent = '👻 GHOST DEFEATED';
                         document.getElementById('objective').textContent = 'pick up the dropped car key → leave through the front door';
                     }
+                    updateExitObjective();
                 } else {
                     message = `${weaponInfo.icon} ${target.label} hit!`;
                 }
             } else {
                 target.entity.active = false;
                 message = `${weaponInfo.icon} ${target.label} eliminated!`;
+                updateExitObjective();
             }
         } else {
             target.entity.stunTimer = STUN_DURATION;
@@ -1944,6 +2166,7 @@
             awardMoney(gameMode === 'regular' ? 200 : 150, 'escape bonus');
             message=`You escaped! +${gameMode === 'regular' ? 200 : 150} credits`;
             messageTimer=3;
+            document.getElementById('nextLevelBtn').hidden = gameMode !== 'regular' || campaignLevel >= 3;
             if (gameMode === 'regular' && challengeMode === null && !disasterModesUnlocked) {
                 disasterModesUnlocked = true;
                 saveProgress();
@@ -2160,7 +2383,7 @@
             }
         }
         if(distance<1.15) {
-            hurtPlayer(24*dt);
+            hurtPlayer(14*dt);
             if(player.health<=0) { gameState='lost'; message='THE BOSS GOT YOU...'; }
         }
     }
@@ -2470,9 +2693,9 @@
         }
     }
 
-    function tryPickupFragments() {
-        const tx = Math.floor(player.x);
-        const ty = Math.floor(player.y);
+    function tryPickupFragments(actor = player) {
+        const tx = Math.floor(actor.x);
+        const ty = Math.floor(actor.y);
         if (map[ty] && map[ty][tx] === 4) {
             for (let i = 0; i < fragmentPositions.length; i++) {
                 const fp = fragmentPositions[i];
@@ -2489,7 +2712,7 @@
                     const count=player.hasCode.filter(v=>v).length;
                     score += 40;
                     message = count===4 ? 'All fragments found! Solve the puzzle at the red door.' : `🔑 Code fragment collected! (${count}/4)`;
-                    if(count===4) document.getElementById('objective').textContent='all fragments found → solve the puzzle at the red door';
+                    if(count===4) updateExitObjective();
                     messageTimer = 2.0;
                     break;
                 }
@@ -2558,7 +2781,7 @@
             const dy = player.y - monster.y;
             const dist = Math.hypot(dx, dy);
             if (dist < 0.85) {
-                hurtPlayer(42 * dt);
+                hurtPlayer(22 * dt);
                 if (player.health <= 0) {
                     player.health = 0;
                     gameState = 'lost';
@@ -2750,7 +2973,8 @@
 
             player.sprinting = keys.shift && !survival.crouched;
             const boostMod = powerUpTimer > 0 ? 1.35 : 1;
-            const wet = currentRoomIndex() === 12 && !solvedRooms.has(12) ? .55 : 1;
+            const waterHazard = (currentRoomIndex() === 12 && !solvedRooms.has(12)) || (campaignLevel === 2 && player.y > MAP_H * 0.55);
+            const wet = waterHazard && frozenFloodTimer <= 0 ? .55 : 1;
             const spd = (player.sprinting ? player.sprintSpeed : player.speed) * boostMod * (survival.crouched ? .42 : 1) * wet;
             const step = spd * dt;
 
@@ -2794,6 +3018,10 @@
                     else { message='The front door is locked. Find the ghost and take its car key!'; messageTimer=2; }
                 } else if(gameMode==='halloween' && halloweenStage==='enter-house') {
                     message='The cabin door is open. Press E to go inside.'; messageTimer=1.5;
+                } else if (hasFullCode() && remainingMazeMonsters() > 0) {
+                    const remaining = remainingMazeMonsters();
+                    message = `The exit is dark. Defeat the remaining ${remaining} monster${remaining === 1 ? '' : 's'} to unlock it!`;
+                    messageTimer = 2;
                 } else if (hasFullCode()) {
                     if(doorPuzzleSolved) enterOutside();
                     else openDoorPuzzle();
@@ -3559,6 +3787,8 @@
     function draw() {
         const w = canvas.width, h = canvas.height, horizon = h * 0.48;
         const now = performance.now();
+        const exitReady = exitDoorReady();
+        const exitPulse = exitReady ? 0.78 + (Math.sin(now / 160) + 1) * 0.18 : 0;
         const shakeX = screenShake > 0 ? (Math.random() - 0.5) * screenShake * 18 : 0;
         const shakeY = screenShake > 0 ? (Math.random() - 0.5) * screenShake * 14 : 0;
         const flickerPhase = now % 5200;
@@ -3623,7 +3853,7 @@
             depth[sx] = dist;
             const wallH = Math.min(h * 1.5, h * 0.82 / Math.max(0.12, dist));
             const top = horizon - wallH / 2;
-            let tint = cell === 2 ? (gameMode==='halloween'?[190,112,39]:[185,38,42]) : cell === 3 ? [100,67,47] : cell === 5 ? [244,214,94] : cell === 6 ? [57,176,100] : worldMode === 'outside' ? (gameMode==='halloween'?[112,86,54]:[77,105,67]) : worldMode === 'armory' ? [103,83,59] : gameMode === 'regular' ? (activeOfficeRoom ? activeOfficeRoom.wallTint : [132,143,137]) : [91,75,105];
+            let tint = cell === 2 ? exitReady ? [45,190 + exitPulse * 45,225 + exitPulse * 30] : (gameMode==='halloween'?[190,112,39]:[185,38,42]) : cell === 3 ? [100,67,47] : cell === 5 ? [244,214,94] : cell === 6 ? [57,176,100] : worldMode === 'outside' ? (gameMode==='halloween'?[112,86,54]:[77,105,67]) : worldMode === 'armory' ? [103,83,59] : gameMode === 'regular' ? (activeOfficeRoom ? activeOfficeRoom.wallTint : [132,143,137]) : [91,75,105];
             const beam = Math.max(0, 1 - Math.abs(camera) * 0.72);
             const light = Math.max(0.12, (1 / (1 + dist * dist * 0.055)) * (0.34 + beam * 1.7))
                 * (1 - lampFlicker * 0.28);
@@ -3672,7 +3902,7 @@
                 ctx.fillStyle = `rgba(0,0,0,${1 - Math.min(1, light * (side ? 0.72 : 1))})`;
                 ctx.fillRect(sx, top, 1.5, wallH);
                 if (cell === 2 || cell === 5 || cell === 6) {
-                    ctx.fillStyle = cell === 2 ? 'rgba(170,20,20,.25)' : cell === 6 ? 'rgba(20,170,70,.2)' : 'rgba(220,180,40,.15)';
+                    ctx.fillStyle = cell === 2 ? (exitReady ? `rgba(38,210,255,${0.22 + exitPulse * 0.22})` : 'rgba(170,20,20,.25)') : cell === 6 ? 'rgba(20,170,70,.2)' : 'rgba(220,180,40,.15)';
                     ctx.fillRect(sx, top, 1.5, wallH);
                 }
             }
@@ -3786,7 +4016,7 @@
                 cryoFrozen: hunter.cryoFrozen && hunter.stunTimer > 0
             }));
         }
-        if (worldMode === 'house' && map[EXIT_POS.y][EXIT_POS.x] === 2) things.push({x:EXIT_POS.x+.5,y:EXIT_POS.y+.5,icon:'🚪',size:.68,glow:'#ff2525'});
+        if (worldMode === 'house' && map[EXIT_POS.y][EXIT_POS.x] === 2) things.push({x:EXIT_POS.x+.5,y:EXIT_POS.y+.5,icon:'🚪',size:exitReady ? 0.72 + exitPulse * 0.05 : 0.68,glow:exitReady?'#55eaff':'#ff2525',exitReady});
         if (worldMode === 'outside') {
             if (gameMode==='regular' && challengeMode === null && !carKeyFound) things.push({x:CAR_KEY_POS.x,y:CAR_KEY_POS.y,icon:'🔑',size:.42,glow:'#ffe45c'});
             things.push({x:CAR_POS.x,y:CAR_POS.y,icon:'🚗',size:1.25,glow:'#65baff'});
@@ -3823,9 +4053,10 @@
             outdoorScenery.forEach(item=>things.push(item));
             if(gameMode==='halloween' && halloweenStage==='yard' && boss.hp>0) things.push({x:boss.x,y:boss.y,icon:'🌾',size:1.15,glow:'#ff8a32',hasEyes:true});
             if (gameMode==='regular' && boss.hp > 0) {
-                if(bossPhase===1) things.push({x:boss.x,y:boss.y,icon:'👾',size:1.12,glow:'#ff3158',hasEyes:true});
+                const bossIcon = campaignLevel === 1 ? '👾' : campaignLevel === 2 ? '🧟' : '👹';
+                if(bossPhase===1) things.push({x:boss.x,y:boss.y,icon:bossIcon,size:1.12,glow:campaignLevel===2?'#55dcff':'#ff3158',hasEyes:true});
                 else {
-                    things.push({x:boss.x,y:boss.y,icon:'👾',size:.72,glow:'#ff3158',hasEyes:true});
+                    things.push({x:boss.x,y:boss.y,icon:bossIcon,size:.72,glow:campaignLevel===2?'#55dcff':'#ff3158',hasEyes:true});
                     for(let piece=0;piece<3;piece++) {
                         const a=Date.now()/320+piece*Math.PI*2/3;
                         things.push({x:boss.x+Math.cos(a)*.75,y:boss.y+Math.sin(a)*.75,icon:'🔻',size:.34,glow:'#ff8c48'});
@@ -3833,9 +4064,19 @@
                 }
             }
         }
+        if (coOpEnabled && coOpPlayer && coOpPlayer.active && worldMode !== 'armory') {
+            things.push({ x: coOpPlayer.x, y: coOpPlayer.y, icon: '🧑‍🚀', size: 0.68, glow: '#55eaff' });
+        }
         if (survival && worldMode === 'house' && gameMode === 'regular') {
-            things.push(...survival.objects.filter(object => !object.used || ['drawer', 'glass'].includes(object.kind)).map(object => ({ ...object, decor: object.kind === 'glass' && !object.used ? 'glassPanel' : object.decor, glow: object.kind === 'note' ? '#d8c27b' : '#9db3a5' })));
-            things.push(...survival.creatures.filter(enemy => enemy.active).map(enemy => ({ x:enemy.x,y:enemy.y,icon:enemy.kind==='blind'?'👾':'👻',size:.8,glow:enemy.kind==='blind'?'#dd9f82':'#9ce6e5',hasEyes:enemy.kind!=='blind' })));
+            things.push(...survival.objects.filter(object => !object.used || ['drawer', 'glass'].includes(object.kind)).map(object => ({ ...object, decor: object.kind === 'glass' && !object.used ? 'glassPanel' : object.decor, glow: object.kind === 'note' ? '#d8c27b' : object.kind === 'relic' ? '#d68cff' : '#9db3a5', lamp: object.kind === 'relic' })));
+            things.push(...survival.creatures.filter(enemy => enemy.active).map(enemy => ({
+                x:enemy.x,y:enemy.y,
+                icon: enemy.kind === 'blind' ? '👾' : enemy.kind === 'ambusher' ? '🦇' : enemy.kind === 'spitter' ? '🧟' : '👻',
+                size: enemy.kind === 'ambusher' ? .9 : .8,
+                glow: enemy.kind === 'blind' ? '#dd9f82' : enemy.kind === 'ambusher' ? '#ed4c77' : enemy.kind === 'spitter' ? '#b2cf5b' : '#9ce6e5',
+                hasEyes: enemy.kind !== 'blind',
+                cryoFrozen: enemy.cryoFrozen && enemy.stunTimer > 0
+            })));
             things.push(...survival.traps.filter(trap => trap.active).map(trap => ({...trap,icon:'🦴',size:.25,glow:'#c9b789'})));
         }
         things.sort((a,b)=>Math.hypot(b.x-player.x,b.y-player.y)-Math.hypot(a.x-player.x,a.y-player.y));
@@ -3853,13 +4094,21 @@
                 const flicker = Math.sin(now / 115 + obj.x * 9 + obj.y * 13);
                 ctx.globalAlpha *= 0.58 + (flicker + 1) * 0.21;
             }
-            ctx.shadowColor=obj.glow; ctx.shadowBlur=20;
+            ctx.shadowColor=obj.glow; ctx.shadowBlur=obj.exitReady ? 38 : 20;
             ctx.font=`${Math.floor(size)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
             const spriteY = obj.lamp
                 ? horizon - size * 0.8
                 : obj.decor === 'officeSign'
                     ? horizon - size * 0.52
                     : horizon + h * .5 / dist - size * .5;
+            if (obj.exitReady) {
+                const exitGlow = ctx.createRadialGradient(x, spriteY, size * 0.08, x, spriteY, size * 2.8);
+                exitGlow.addColorStop(0, `rgba(75,225,255,${0.4 + exitPulse * 0.2})`);
+                exitGlow.addColorStop(0.35, `rgba(45,195,255,${0.2 + exitPulse * 0.12})`);
+                exitGlow.addColorStop(1, 'rgba(35,170,255,0)');
+                ctx.fillStyle = exitGlow;
+                ctx.fillRect(x - size * 2.8, spriteY - size * 2.8, size * 5.6, size * 5.6);
+            }
             if (obj.lamp) {
                 const glow = ctx.createRadialGradient(x,spriteY,1,x,spriteY,size*2.3);
                 glow.addColorStop(0,'rgba(255,226,145,.34)'); glow.addColorStop(1,'rgba(255,220,130,0)');
@@ -4175,9 +4424,10 @@
             }
             ctx.shadowBlur=0; ctx.globalAlpha=1;
         }
-        if (currentRoomIndex() === 12 && !solvedRooms.has(12)) {
-            ctx.fillStyle='rgba(25,92,116,.24)'; ctx.fillRect(0,h*.62,w,h*.38);
-            ctx.strokeStyle='rgba(118,203,213,.22)';
+        if ((currentRoomIndex() === 12 && !solvedRooms.has(12)) || (campaignLevel === 2 && player.y > MAP_H * 0.55)) {
+            ctx.fillStyle = frozenFloodTimer > 0 ? 'rgba(66,195,255,.3)' : 'rgba(25,92,116,.24)';
+            ctx.fillRect(0,h*.62,w,h*.38);
+            ctx.strokeStyle = frozenFloodTimer > 0 ? 'rgba(203,246,255,.64)' : 'rgba(118,203,213,.22)';
             for(let line=0;line<8;line++) {const yy=h*.65+line*18+Math.sin(now*.001+line)*3;ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(w,yy+Math.sin(line)*5);ctx.stroke();}
         }
         // Dark vignette keeps the flashlight beam clear and the edges threatening.
@@ -4234,7 +4484,7 @@
             // Outdoor enemy health display and first-person pistol.
             ctx.fillStyle='rgba(8,8,12,.82)'; ctx.fillRect(18,18,310,58);
             ctx.fillStyle='#fff'; ctx.font='bold 14px "Courier New"'; ctx.textAlign='left'; ctx.textBaseline='top';
-            const outdoorLabel=gameMode==='halloween'?'SCARECROW':`PHASE ${bossPhase}`;
+            const outdoorLabel=gameMode==='halloween'?'SCARECROW':`LEVEL ${campaignLevel} · PHASE ${bossPhase}`;
             ctx.fillText(boss.hp > 0 ? `${outdoorLabel}  ${boss.hp} / ${boss.maxHp} HP` : (gameMode==='halloween'?'SCARECROW DEFEATED':'BOSS DEFEATED'),28,24);
             ctx.fillStyle='#3b2429'; ctx.fillRect(28,46,288,14);
             ctx.fillStyle=boss.hp>0?'#ed344e':'#42c983'; ctx.fillRect(28,46,288*(boss.hp/boss.maxHp),14);
@@ -4343,6 +4593,10 @@
             ctx.fillStyle='#7de5ff'; ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2); ctx.fill();
             ctx.strokeStyle='#7de5ff'; ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+Math.cos(player.angle)*8,py+Math.sin(player.angle)*8); ctx.stroke();
         }
+        if (coOpEnabled && coOpPlayer) {
+            ctx.fillStyle='#a8ffcb'; ctx.shadowColor='#55eaff'; ctx.shadowBlur=8;
+            ctx.beginPath(); ctx.arc(mapX+coOpPlayer.x*radarScale,mapY+coOpPlayer.y*radarScale,4,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+        }
         if(gameState==='playing' && worldMode==='house' && gameMode==='regular' && !player.inCloset) {
             const pulse=.75+.25*Math.sin(Date.now()/150);
             ctx.fillStyle=`rgba(255,55,55,${pulse})`; ctx.shadowColor='#ff2525'; ctx.shadowBlur=10;
@@ -4406,7 +4660,9 @@
             ctx.fillStyle = '#ccc';
             ctx.fillText(disasterModesUnlocked && challengeMode === null
                 ? '🌪️ TORNADO + 🌊 TSUNAMI MODES UNLOCKED ABOVE'
-                : 'press R or click RESTART', w/2, 360);
+                : gameMode === 'regular' && campaignLevel < 3 ? 'click NEXT LEVEL below or press N'
+                    : campaignLevel === 3 && gameMode === 'regular' ? 'CAMPAIGN COMPLETE · press R to play again'
+                        : 'press R or click RESTART', w/2, 360);
         } else if (gameState === 'lost') {
             ctx.fillStyle = 'rgba(20,0,0,0.85)';
             ctx.fillRect(0, 0, w, h);
@@ -4437,10 +4693,13 @@
     function gameLoop(now) {
         const dt = Math.min(0.05, (now - lastTime) / 1000);
         lastTime = now;
+        damageGraceTimer = Math.max(0, damageGraceTimer - dt);
+        frozenFloodTimer = Math.max(0, frozenFloodTimer - dt);
         secretWeaponAnimationTimer = Math.max(0, secretWeaponAnimationTimer - dt);
 
         if (gameState === 'playing') {
             updatePlayer(dt);
+            updateCoOpPlayer(dt);
             updateExploration();
             updateDisasterChallenge(dt);
             updateMonster(dt);
@@ -4509,6 +4768,11 @@
             else { e.preventDefault(); e.stopPropagation(); }
             return;
         }
+        if (coOpEnabled && coOpPlayer && e.code.startsWith('Arrow')) {
+            const partnerKey = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.code];
+            if (partnerKey) { coOpKeys[partnerKey] = true; e.preventDefault(); return; }
+        }
+        if (coOpEnabled && e.code === 'Enter' && !e.repeat) { attackCoOpPlayer(); e.preventDefault(); return; }
         const key = movementKeys[e.code] || e.key.toLowerCase();
         if (['w', 'a', 's', 'd'].includes(key)) {
             keys[key] = true;
@@ -4560,12 +4824,20 @@
         } else if (key === 'k' && !e.repeat) {
             saveCheckpoint(); e.preventDefault();
         } else if (key === 'r') {
+            if (gameState === 'won' && gameMode === 'regular' && campaignLevel === 3) campaignLevel = 1;
             resetGame();
+            e.preventDefault();
+        } else if (key === 'n' && gameState === 'won') {
+            startNextLevel();
             e.preventDefault();
         }
     });
 
     window.addEventListener('keyup', (e) => {
+        if (coOpEnabled && e.code.startsWith('Arrow')) {
+            const partnerKey = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.code];
+            if (partnerKey) { coOpKeys[partnerKey] = false; e.preventDefault(); return; }
+        }
         const key = movementKeys[e.code] || e.key.toLowerCase();
         if (['w', 'a', 's', 'd'].includes(key)) {
             keys[key] = false;
@@ -4588,6 +4860,7 @@
     // A keyup can be missed if the window loses focus while a key is held.
     window.addEventListener('blur', () => {
         Object.keys(keys).forEach(key => { keys[key] = false; });
+        Object.keys(coOpKeys).forEach(key => { coOpKeys[key] = false; });
     });
 
     document.querySelectorAll('[data-movement-key]').forEach(button => {
@@ -4677,16 +4950,26 @@
     });
     document.getElementById('regularMode').addEventListener('click', () => {
         selectedMode='regular';
+        campaignLevel = 1;
         resetGame();
     });
     document.getElementById('nightmareMode').addEventListener('click', () => {
         selectedMode = 'nightmare';
+        coOpEnabled = false; campaignLevel = 1;
         resetGame();
     });
     document.getElementById('halloweenMode').addEventListener('click', () => {
         selectedMode='halloween';
+        coOpEnabled = false; campaignLevel = 1;
         resetGame();
     });
+    document.getElementById('coOpMode').addEventListener('click', () => {
+        selectedMode = 'regular';
+        campaignLevel = 1;
+        coOpEnabled = !coOpEnabled;
+        resetGame();
+    });
+    document.getElementById('nextLevelBtn').addEventListener('click', startNextLevel);
     document.getElementById('tornadoMode').addEventListener('click', () => startDisasterMode('tornado'));
     document.getElementById('tsunamiMode').addEventListener('click', () => startDisasterMode('tsunami'));
     canvas.addEventListener('mousedown', (e) => {

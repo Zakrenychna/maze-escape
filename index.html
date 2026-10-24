@@ -11,6 +11,7 @@
     <div class="mode-picker" aria-label="Choose game mode">
         <button id="regularMode" aria-pressed="true"><span>🎮 REGULAR MODE</span><small>Safe room, weapon shop, maze, and boss</small></button>
         <button id="nightmareMode" aria-pressed="false"><span>☠ NIGHTMARE</span><small>Pitch black · flashlight only · radar offline</small></button>
+        <button id="coOpMode" aria-pressed="false"><span>🤝 LOCAL CO-OP</span><small>Second player uses arrow keys + ENTER</small></button>
         <button id="halloweenMode" aria-pressed="false"><span>🎃 HALLOWEEN MODE</span><small>Open yard, scarecrow, haunted house, and ghost</small></button>
         <button id="tornadoMode" aria-pressed="false" hidden><span>🌪️ TORNADO RUN</span><small>Find three supply crates, then reach the car</small></button>
         <button id="tsunamiMode" aria-pressed="false" hidden><span>🌊 TSUNAMI ESCAPE</span><small>Race the rising wave to the high ground</small></button>
@@ -112,8 +113,10 @@
             <span>💰 <span id="money">0</span></span>
             <span id="monsterState">👹 UNAWARE</span>
             <span id="weaponStatus">⚡ READY</span>
+            <span id="coOpStatus"></span>
         </div>
         <button id="restartBtn">⟲ RESTART</button>
+        <button type="button" id="nextLevelBtn" hidden>➡ NEXT LEVEL</button>
     </div>
     <div class="controls">
         <span><kbd>W</kbd><kbd>S</kbd> move · <kbd>A</kbd><kbd>D</kbd> turn</span>
@@ -123,6 +126,7 @@
         <span><kbd>C</kbd> crouch · <kbd>Q</kbd> bottle · <kbd>X</kbd> trap · <kbd>B</kbd> reload</span>
         <span><kbd>U</kbd> UV · <kbd>Y</kbd> battery · <kbd>K</kbd> checkpoint</span>
         <span><kbd>T</kbd> toggle flashlight</span>
+        <span><kbd>ARROWS</kbd> move / turn · <kbd>ENTER</kbd> partner fire (local co-op)</span>
         <span><kbd>F</kbd> use car</span>
         <span><kbd>SHIFT</kbd> sprint</span>
         <span><kbd>5</kbd> secret weapon animation</span>
