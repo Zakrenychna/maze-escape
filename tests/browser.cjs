@@ -1,0 +1,62 @@
+const {spawn}=require('node:child_process');
+const fs=require('node:fs');const os=require('node:os');const path=require('node:path');const http=require('node:http');const assert=require('node:assert/strict');
+(async()=>{
+const root=process.cwd();const profile=fs.mkdtempSync(path.join(os.tmpdir(),'maze-browser-'));
+const server=http.createServer((req,res)=>{let name=decodeURIComponent(req.url.split('?')[0]);if(name==='/')name='/index.html';const file=path.resolve(root,'.'+name);if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}try{let data=fs.readFileSync(file);if(name==='/game.js')data=Buffer.from(data.toString().replace('    // Initialize & start','    window.qa = {get player(){return player}, draw, get survival(){return survival}, get money(){return money}, set money(value){money=value;updateArmoryUI()}, saveCheckpoint, resumeCheckpoint, get flashlight(){return flashlightOn}, get nightmare(){return nightmareMode}, quiet(){survival.creatures.forEach(c=>c.active=false);monster.active=false;stalkers.forEach(s=>s.active=false);roomHunters.forEach(h=>h.active=false);keyGuards.forEach(g=>g.active=false)}, rooms: MAZE_ROOMS, interactRoom, submitRoomPuzzle, resetGame, get state(){return gameState}, get solved(){return solvedRooms}};\n    // Initialize & start'));res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':name.endsWith('.png')?'image/png':'text/html');res.end(data);}catch{res.writeHead(404).end();}});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const chromePath=process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+assert(fs.existsSync(chromePath),'Set CHROME_PATH to a Chromium executable.');
+const chrome=spawn(chromePath,['--headless=new','--disable-gpu','--no-first-run','--remote-debugging-port=0',`--user-data-dir=${profile}`,'--window-size=1280,1100','about:blank'],{stdio:'ignore',windowsHide:true});
+let ws;
+try{
+const portFile=path.join(profile,'DevToolsActivePort');for(let i=0;i<100&&!fs.existsSync(portFile);i++)await new Promise(r=>setTimeout(r,100));
+const port=fs.readFileSync(portFile,'utf8').split('\n')[0];const pages=await(await fetch(`http://127.0.0.1:${port}/json/list`)).json();ws=new WebSocket(pages.find(page=>page.type==='page').webSocketDebuggerUrl);await new Promise(r=>ws.addEventListener('open',r,{once:true}));let next=0;const pending=new Map();const errors=[];
+ws.addEventListener('message',e=>{const data=JSON.parse(e.data);if(data.id){const p=pending.get(data.id);pending.delete(data.id);data.error?p.reject(data.error):p.resolve(data.result);}if(data.method==='Runtime.exceptionThrown')errors.push(data.params.exceptionDetails.text+JSON.stringify(data.params.exceptionDetails.exception));});
+const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++next;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
+await call('Runtime.enable');await call('Page.enable');await call('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
+const evaluate=async(expression)=>{const result=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
+for(let i=0;i<100;i++){if(await evaluate('!!window.qa && document.readyState === "complete"'))break;await new Promise(r=>setTimeout(r,100));}
+assert(await evaluate('!!window.qa'),'game started');
+const assets=await evaluate('Promise.all(["maze-atlas","props-atlas","outdoor-atlas","expansion-atlas","weapons-atlas","nightmare-atlas"].map(name=>new Promise(resolve=>{const image=new Image();image.onload=()=>resolve({name,width:image.naturalWidth});image.onerror=()=>resolve({name,width:0});image.src="assets/"+name+".png";})))');assert(assets.every(a=>a.width>0),'every atlas loads');
+fs.writeFileSync(path.join(os.tmpdir(),'maze-armory.png'),Buffer.from((await call('Page.captureScreenshot')).data,'base64'));
+await evaluate('document.getElementById("enterMazeBtn").click();document.getElementById("journalBtn").click();');
+assert(await evaluate('!document.getElementById("missionJournal").hidden'),'journal opens');
+await evaluate('qa.player.x=15.5;qa.player.y=26.5;qa.player.angle=-Math.PI/2;qa.interactRoom();');
+assert.equal(await evaluate('qa.state'),'puzzle');
+fs.writeFileSync(path.join(os.tmpdir(),'maze-puzzle.png'),Buffer.from((await call('Page.captureScreenshot')).data,'base64'));
+await evaluate('document.getElementById("doorCodeInput").value="3";document.getElementById("doorPuzzleForm").requestSubmit();');
+assert(await evaluate('qa.solved.has(7)'),'real form solves generator');
+await evaluate('qa.player.x=16.5;qa.player.y=4.5;qa.player.angle=Math.PI;');await new Promise(r=>setTimeout(r,150));
+fs.writeFileSync(path.join(os.tmpdir(),'maze-medical.png'),Buffer.from((await call('Page.captureScreenshot')).data,'base64'));
+// Drive new inventory, crafting and four interactive puzzles through real DOM controls.
+await evaluate('document.getElementById("regularMode").click();qa.money=1000;document.querySelector("[data-shop-weapon=silenced]").click();document.querySelector("[data-weapon-mod=scope]").click();document.getElementById("enterMazeBtn").click();qa.quiet();document.getElementById("inventoryBtn").click();qa.survival.items.scrap=8;document.querySelector("[data-craft=trap]").click();');
+assert(await evaluate('!document.getElementById("inventoryPanel").hidden && qa.survival.items.trap===1'),'inventory and crafting controls work');
+assert(await evaluate('qa.player.weapon==="silenced" && qa.survival.gunMods.silenced==="scope"'),'gun and mod purchase controls work');
+const enterPuzzle=async index=>{await evaluate(`qa.player.x=qa.rooms[${index}].x+2.7;qa.player.y=qa.rooms[${index}].y+3.1;document.getElementById("interactBtn").click();`);assert.equal(await evaluate('qa.state'),'puzzle');};
+await enterPuzzle(8);assert.equal(await evaluate('document.querySelectorAll("#puzzleTools select").length'),3);
+await evaluate('[...document.querySelectorAll("#puzzleTools select")].forEach((select,index)=>{select.value=["2","3","1"][index];select.dispatchEvent(new Event("change",{bubbles:true}));});document.getElementById("doorPuzzleForm").requestSubmit();');
+assert(await evaluate('qa.solved.has(8)'),'wire connections solve puzzle');
+await enterPuzzle(9);await evaluate('document.querySelector("#puzzleTools button").click();');assert(await evaluate('document.getElementById("uvClue").textContent.includes("6284")'),'UV reveals hidden inscription');
+await evaluate('document.getElementById("doorCodeInput").value="6284";document.getElementById("doorPuzzleForm").requestSubmit();');assert(await evaluate('qa.solved.has(9)'));
+await enterPuzzle(10);assert(await evaluate('!!document.querySelector(".mirror-clue")'));await evaluate('document.getElementById("doorCodeInput").value="5831";document.getElementById("doorPuzzleForm").requestSubmit();');assert(await evaluate('qa.solved.has(10)'));
+await evaluate('qa.solved.add(7);qa.survival.items.documents=3;');await enterPuzzle(11);
+await evaluate('const receiver=document.getElementById("radioFrequency");receiver.value="1047";receiver.dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("doorPuzzleForm").requestSubmit();');assert(await evaluate('qa.solved.has(11)&&qa.survival.transmitted'),'radio sends evidence');
+await evaluate('document.getElementById("inventoryBtn").click();qa.draw();document.getElementById("saveRun").click();');const savedBalance=await evaluate('qa.money');
+await evaluate('qa.money+=100;document.getElementById("resumeRun").click();qa.quiet();');assert.equal(await evaluate('qa.money'),savedBalance,'checkpoint restores saved timeline');
+fs.writeFileSync(path.join(os.tmpdir(),'maze-survival.png'),Buffer.from((await call('Page.captureScreenshot')).data,'base64'));
+await evaluate('document.getElementById("nightmareMode").click();document.getElementById("enterMazeBtn").click();qa.quiet();qa.player.x=15.5;qa.player.y=27.2;qa.player.angle=-Math.PI/2;qa.player.weapon="silenced";qa.draw();');
+assert(await evaluate('qa.nightmare && qa.flashlight'),'Nightmare starts with flashlight');
+await call('Emulation.setVirtualTimePolicy',{policy:'pause'});
+const brightness=()=>evaluate('(()=>{const c=document.getElementById("gameCanvas"),ctx=c.getContext("2d"),p=ctx.getImageData(290,150,140,100).data;let n=0;for(let i=0;i<p.length;i+=4)n+=(p[i]+p[i+1]+p[i+2])/3;return n/(p.length/4);})()');
+const lit=await brightness();
+fs.writeFileSync(path.join(os.tmpdir(),'maze-nightmare-on.png'),Buffer.from((await call('Page.captureScreenshot')).data,'base64'));
+await call('Input.dispatchKeyEvent',{type:'keyDown',key:'t',code:'KeyT'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'t',code:'KeyT'});await evaluate('qa.draw()');
+assert.equal(await evaluate('qa.flashlight'),false,'T toggles flashlight');
+const dark=await brightness();assert(lit>dark+8,`beam reveals scene: ${lit} vs ${dark}`);assert(dark<2,'light off is almost black');
+fs.writeFileSync(path.join(os.tmpdir(),'maze-nightmare-off.png'),Buffer.from((await call('Page.captureScreenshot')).data,'base64'));
+await evaluate('document.getElementById("flashlightBtn").click();qa.draw();');assert(await evaluate('qa.flashlight'),'touch button toggles light');
+console.log('LIGHTING',JSON.stringify({lit,dark}));
+await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});assert(await evaluate('document.documentElement.scrollWidth <= 390'),'mobile has no horizontal overflow');
+assert.deepEqual(errors,[],'no browser runtime errors');console.log(JSON.stringify({result:'PASS Chrome: survival inventory/crafting, wires/UV/mirror/radio forms, evidence, checkpoint resume, Nightmare pixels and controls, mobile layout, no runtime errors',assets,screenshots:['maze-armory.png','maze-puzzle.png','maze-medical.png'].map(n=>path.join(os.tmpdir(),n))},null,2));
+}finally{if(ws)ws.close();chrome.kill();server.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

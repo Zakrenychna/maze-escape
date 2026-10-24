@@ -79,23 +79,6 @@
     const TILE_SIZE = 40;
 
     // 0 = empty, 1 = wall, 2 = exit door, 3 = closet, 4 = code fragment, 5 = secret wall, 6 = green door
-    const baseMap = [
-        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
-        [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
-        [1,0,1,0,0,0,1,3,1,0,0,0,1,0,1],
-        [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
-        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-        [1,1,1,0,1,1,1,1,1,0,1,1,1,0,1],
-        [1,0,0,0,1,3,0,0,0,0,1,0,0,0,1],
-        [1,0,1,1,1,0,1,1,1,1,1,0,1,0,1],
-        [1,0,1,0,0,0,1,4,1,0,0,0,1,0,1],
-        [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1],
-        [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
-        [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
-        [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
-        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-    ];
     const ROOM_PUZZLES = [
         { title: 'NORTH OFFICE · CLOCK', prompt: 'The clock stopped at 02:17. Enter the four digits shown on the clock.', answer: '0217', hint: 'Keep the leading zero: 02 then 17.', reward: 45, decor: 'telephone' },
         { title: 'RECORDS · FILE SEQUENCE', prompt: 'File numbers: 3, 6, 12, 24, __. Which file comes next?', answer: '48', hint: 'Each number doubles.', reward: 45, decor: 'journal' },
@@ -113,9 +96,28 @@
     let journalOpen = false;
 
     // Double the original floor plan in both directions for a larger maze.
-    const MAP_W = baseMap[0].length * 2;
-    const MAP_H = baseMap.length * 2;
-    let map = baseMap.flatMap(row => [row.flatMap(cell => [cell, cell]), row.flatMap(cell => [cell, cell])]);
+    const MAP_W = 42;
+    const MAP_H = 42;
+    let map = makeProceduralMap();
+
+    function makeProceduralMap() {
+        const grid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(1));
+        const stack = [[1, 1]];
+        grid[1][1] = 0;
+        while (stack.length) {
+            const [x, y] = stack[stack.length - 1];
+            const options = [[2, 0], [-2, 0], [0, 2], [0, -2]].filter(([dx, dy]) =>
+                x + dx > 0 && y + dy > 0 && x + dx < MAP_W - 1 && y + dy < MAP_H - 1 && grid[y + dy][x + dx] === 1);
+            if (!options.length) { stack.pop(); continue; }
+            const [dx, dy] = options[Math.floor(Math.random() * options.length)];
+            grid[y + dy / 2][x + dx / 2] = 0;
+            grid[y + dy][x + dx] = 0;
+            stack.push([x + dx, y + dy]);
+        }
+        // Keep the opening lane and secret wall familiar; the surrounding maze changes.
+        for (let y = 2; y <= 5; y++) for (let x = 2; x <= 5; x++) grid[y][x] = 0;
+        return grid;
+    }
 
     const EXIT_POS = { x: 27, y: 27 };
     const SECRET_WALL_POS = { x: 8, y: 7 };
@@ -135,6 +137,37 @@
         { x: 12, y: 23, entrance: 'E', name: 'GENERATOR ROOM', color: '#e8b765', floorTint: '#39362d', wallTint: [146, 136, 112], icon: '⚡', enemy: { x: 13.5, y: 26.5 }, furnishings: [
             { x: 13.5, y: 24.5, decor: 'generator', size: 1 }, { x: 16.5, y: 24.5, decor: 'fusePanel', size: .7 }, { x: 13.5, y: 27.5, decor: 'valve', size: .55 }] }
     );
+    const ANNEX_SLOTS = [{ x: 32, y: 2 }, { x: 32, y: 10 }, { x: 32, y: 18 }, { x: 32, y: 26 }, { x: 22, y: 33 }];
+    ['BASEMENT', 'OPERATING THEATRE', 'WORKSHOP', 'SERVER ROOM', 'FLOODED TUNNEL'].forEach((name, index) => {
+        const { x, y } = ANNEX_SLOTS[index];
+        const decors = [['generator', 'valve'], ['hospitalBed', 'microscope'], ['officeDesk', 'equipmentCase'], ['officeCabinet', 'fusePanel'], ['filter', 'valve']][index];
+        MAZE_ROOMS.push({ x, y, entrance: 'W', name, color: ['#a99a78', '#a6d7d1', '#e4ad72', '#8bb5ed', '#6bbdc9'][index],
+            floorTint: index === 4 ? '#193a41' : '#343939', wallTint: [113, 135, 136], icon: '📦', enemy: { x: x + 4.5, y: y + 4.5 },
+            furnishings: [{ x: x + 1.5, y: y + 1.5, decor: decors[0], size: .85 }, { x: x + 4.4, y: y + 1.5, decor: decors[1], size: .65 }] });
+    });
+    ROOM_PUZZLES.push(
+        { title: 'BASEMENT · WIRING', kind: 'wires', prompt: 'Connect each supply wire to the matching terminal. Terminal numbers are engraved beside the colors.', answer: '231', hint: 'RED → 2, BLUE → 3, YELLOW → 1.', reward: 90, decor: 'fusePanel' },
+        { title: 'THEATRE · UV INSCRIPTION', kind: 'uv', prompt: 'The cabinet looks blank. Switch on ultraviolet light (U) and examine the hidden inscription.', answer: '6284', hint: 'Enable U or the UV button to reveal the inscription.', reward: 90, decor: 'hospitalBed' },
+        { title: 'WORKSHOP · MIRROR LOCK', kind: 'mirror', prompt: 'A number is visible only in the workshop mirror. Read its reflection to open the tool cage.', answer: '5831', hint: 'The mirror reverses 1385.', reward: 80, decor: 'safe' },
+        { requires: 7, title: 'SERVER ROOM · RADIO', kind: 'radio', prompt: 'Tune the receiver until you can hear the emergency transmission clearly. Confirm the frequency.', answer: '1047', hint: 'The emergency band is 104.7 MHz.', reward: 100, decor: 'telephone' },
+        { title: 'TUNNEL · DRAIN PUMPS', prompt: 'The tunnel holds 120 litres. Two pumps remove 15 litres per minute each. How many minutes will draining take?', answer: '4', hint: 'Divide 120 by the combined pump rate of 30.', reward: 80, decor: 'valve' }
+    );
+
+    function shuffleAnnexRooms() {
+        const slots = ANNEX_SLOTS.map(slot => ({ ...slot }));
+        for (let i = slots.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [slots[i], slots[j]] = [slots[j], slots[i]];
+        }
+        slots.forEach((slot, index) => relocateRoom(MAZE_ROOMS[index + 8], slot));
+    }
+
+    function relocateRoom(room, position) {
+        const dx = position.x - room.x, dy = position.y - room.y;
+        room.enemy.x += dx; room.enemy.y += dy;
+        room.furnishings.forEach(item => { item.x += dx; item.y += dy; });
+        room.x = position.x; room.y = position.y;
+    }
     let secretWall = { x: SECRET_WALL_POS.x + 0.5, y: SECRET_WALL_POS.y + 0.5, discovered: false };
     let greenDoorClueFound = false;
     let secretCacheClaimed = false;
@@ -252,7 +285,7 @@
             if (connectedTiles.has(outside.y * MAP_W + outside.x)) continue;
             const path = findPath(outside,
                 (x, y) => connectedTiles.has(y * MAP_W + x),
-                (x, y) => !roomTile(x, y) && !protectedSecretTile(x, y) &&
+                (x, y) => x > 0 && y > 0 && x < MAP_W - 1 && y < MAP_H - 1 && !roomTile(x, y) && !protectedSecretTile(x, y) &&
                     map[y][x] !== 3 && map[y][x] !== 5 && map[y][x] !== 6
             );
             if (!path) throw new Error(`Could not connect the ${room.name} entrance to the maze.`);
@@ -261,7 +294,7 @@
             }
         }
         // Room walls can cut off an old corridor; reconnect every escape objective.
-        for (const target of [...fragmentPositions, EXIT_POS]) {
+        for (const target of [...fragmentPositions, EXIT_POS, { x: SECRET_WALL_POS.x, y: SECRET_WALL_POS.y - 1 }]) {
             const reachable = new Set(['3,3']);
             const queue = [{ x: 3, y: 3 }];
             for (let head = 0; head < queue.length; head++) {
@@ -353,6 +386,7 @@
         const defaults = {
             money: 0,
             medkits: 1,
+            gunMods: {},
             weapons: Object.fromEntries(Object.keys(WEAPON_DEFS).map(weapon => [weapon, weapon === 'knife'])),
             upgrades: { armor: 0, boots: 0 },
             disasterModesUnlocked: false
@@ -374,7 +408,11 @@
                     upgrades[upgrade] = Number.isSafeInteger(level) ? Math.max(0, Math.min(2, level)) : 0;
                 }
             }
-            return { money, medkits: Number.isSafeInteger(saved.medkits) ? Math.max(0, Math.min(5, saved.medkits)) : 1, weapons, upgrades, disasterModesUnlocked: saved.disasterModesUnlocked === true };
+            const gunMods = {};
+            if (saved.gunMods && typeof saved.gunMods === 'object') for (const weapon of Object.keys(WEAPON_DEFS)) {
+                if (['scope', 'magazine', 'power'].includes(saved.gunMods[weapon])) gunMods[weapon] = saved.gunMods[weapon];
+            }
+            return { money, gunMods, medkits: Number.isSafeInteger(saved.medkits) ? Math.max(0, Math.min(5, saved.medkits)) : 1, weapons, upgrades, disasterModesUnlocked: saved.disasterModesUnlocked === true };
         } catch (error) {
             console.error('Could not load saved maze progress:', error);
             return defaults;
@@ -384,6 +422,7 @@
     const progress = loadProgress();
     let money = progress.money;
     let medkits = progress.medkits;
+    const ownedGunMods = progress.gunMods;
     const ownedWeapons = progress.weapons;
     const ownedUpgrades = progress.upgrades;
     let disasterModesUnlocked = progress.disasterModesUnlocked;
@@ -393,6 +432,7 @@
             localStorage.setItem(PROGRESS_KEY, JSON.stringify({
                 money,
                 medkits,
+                gunMods: ownedGunMods,
                 weapons: ownedWeapons,
                 upgrades: ownedUpgrades,
                 disasterModesUnlocked
@@ -407,6 +447,7 @@
         document.getElementById('buyMedkit').disabled = money < 55 || medkits >= 5;
         document.getElementById('money').textContent = money;
         document.getElementById('armoryMoney').textContent = money;
+        if (survival) updateSurvivalUI();
         document.getElementById('armoryPanel').hidden = !(gameMode === 'regular' && worldMode === 'armory');
         const activeWeapon = WEAPON_DEFS[player.weapon] || WEAPON_DEFS.knife;
         document.getElementById('weaponStatus').textContent = `${activeWeapon.icon} ${activeWeapon.label}`;
@@ -422,7 +463,7 @@
             const columns = extra ? 2 : 4;
             const imageStyle = `background-image:url('assets/${extra ? 'nightmare' : 'weapons'}-atlas.png');background-size:${columns * 100}% ${columns * 100}%;background-position:${cell % columns * 100 / (columns - 1)}% ${Math.floor(cell / columns) * 100 / (columns - 1)}%`;
             const stats = WEAPON_DEFS[weapon];
-            button.innerHTML = `<span class="weapon-art" aria-hidden="true" style="${imageStyle}"></span>${stats.label}<small>${status} · ${stats.description}</small><small>${stats.damage} DMG · ${stats.range}m · ${stats.cooldown}s</small>`;
+            button.innerHTML = `<span class="weapon-art" aria-hidden="true" style="${imageStyle}"></span>${stats.label}<small>${status} · ${stats.description}</small><small>${stats.damage} DMG · ${stats.range}m · ${stats.cooldown}s${ownedGunMods[weapon] ? ` · ${ownedGunMods[weapon].toUpperCase()} MOD` : ''}</small>`;
             button.disabled = !owned && (weapon === 'lightsaber' || money < price);
         });
         document.querySelectorAll('[data-shop-upgrade]').forEach(button => {
@@ -433,6 +474,11 @@
             const status = level >= 2 ? 'MAX LEVEL' : `LEVEL ${level} · BUY ${price} CREDITS`;
             button.innerHTML = `${UPGRADE_DEFS[upgrade].icon} ${UPGRADE_DEFS[upgrade].label}<small>${status} · ${UPGRADE_DEFS[upgrade].description}</small>`;
             button.disabled = level >= 2 || money < price;
+        });
+        document.querySelectorAll('[data-weapon-mod]').forEach(button => {
+            const equipped = ownedGunMods[player.weapon] === button.dataset.weaponMod;
+            button.disabled = isMelee(player.weapon) || equipped || money < 90;
+            button.setAttribute('aria-pressed', String(equipped));
         });
     }
 
@@ -576,15 +622,580 @@
     const keys = { w: false, a: false, s: false, d: false, shift: false, e: false, f: false, space: false };
     let ePressed = false, fPressed = false, spacePressed = false;
 
+    // ---------- SURVIVAL, SOUND AND RUN STATE ----------
+    const CHECKPOINT_KEY = 'maze-house-checkpoint-v2';
+    const ITEM_NAMES = { scrap: 'SCRAP', tool: 'TOOL KIT', lockpick: 'LOCKPICKS', trap: 'TRAPS', bottle: 'BOTTLES', ammo: 'AMMO', battery: 'BATTERIES', documents: 'DOCUMENTS' };
+    const STACK_SIZES = { scrap: 4, tool: 1, lockpick: 3, trap: 2, bottle: 3, ammo: 24, battery: 2, documents: 3 };
+    let survival = null;
+    let audioContext = null;
+    let audioEnabled = true;
+    let soundClock = 0;
+    let checkpointClock = 0;
+    let previousHealth = 100;
+    let runEnding = '';
+    const clone = value => JSON.parse(JSON.stringify(value));
+
+    function inventorySlots(items = survival?.items, kitCount = medkits) {
+        if (!items) return kitCount;
+        return Object.keys(ITEM_NAMES).reduce((sum, key) => sum + Math.ceil(items[key] / STACK_SIZES[key]), 0)
+            + kitCount + (player.hasCode.some(Boolean) ? 1 : 0) + (carKeyFound ? 1 : 0);
+    }
+
+    function addItem(item, amount) {
+        if (!survival || !(item in ITEM_NAMES) || !Number.isSafeInteger(amount) || amount <= 0) return false;
+        const next = { ...survival.items, [item]: survival.items[item] + amount };
+        if (inventorySlots(next) > 12) { notify('Inventory full. Open I and drop something.'); return false; }
+        survival.items = next;
+        updateSurvivalUI();
+        return true;
+    }
+
+    function notify(text, duration = 3) { message = text; messageTimer = duration; }
+
+    function unlockAudio() {
+        if (!audioEnabled) return;
+        try {
+            const Audio = window.AudioContext || window.webkitAudioContext;
+            if (!Audio) return;
+            if (!audioContext) audioContext = new Audio();
+            if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+        } catch { audioEnabled = false; }
+    }
+
+    function playSound(kind, x = player.x, y = player.y) {
+        if (!audioEnabled || !audioContext || audioContext.state !== 'running') return;
+        const dx = x - player.x, dy = y - player.y, distance = Math.hypot(dx, dy);
+        if (distance > 16) return;
+        const angle = Math.atan2(dy, dx) - player.angle;
+        const occluded = distance > 1 && !lineOfSight(player.x, player.y, x, y);
+        const frequencies = { step: 85, breath: 48, door: 135, glass: 1300, gun: 65, radio: 700, trap: 190, whisper: 330 };
+        const start = audioContext.currentTime, duration = kind === 'breath' ? .65 : kind === 'door' ? .4 : .16;
+        const oscillator = audioContext.createOscillator(), gain = audioContext.createGain();
+        const filter = audioContext.createBiquadFilter(), pan = audioContext.createStereoPanner();
+        oscillator.type = ['glass', 'radio', 'door'].includes(kind) ? 'sawtooth' : 'triangle';
+        oscillator.frequency.setValueAtTime(frequencies[kind] || 180, start);
+        oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, (frequencies[kind] || 180) * .35), start + duration);
+        filter.type = 'lowpass'; filter.frequency.value = occluded ? 350 : 6000;
+        pan.pan.value = Math.sin(angle);
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime((kind === 'gun' ? .15 : .07) / (1 + distance * .7) * (occluded ? .4 : 1), start + .015);
+        gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
+        oscillator.connect(filter); filter.connect(gain); gain.connect(pan); pan.connect(audioContext.destination);
+        oscillator.start(start); oscillator.stop(start + duration);
+    }
+
+    function emitNoise(x, y, radius, kind = 'step') {
+        if (!survival) return;
+        survival.noise = { x, y, radius, life: 5 };
+        playSound(kind, x, y);
+        if (worldMode !== 'house' || gameMode !== 'regular') return;
+        for (const enemy of [monster, ...roomHunters, ...stalkers]) {
+            if (enemy.active === false || Math.hypot(enemy.x - x, enemy.y - y) > radius) continue;
+            enemy.lastSeenPlayer = { x, y }; enemy.searchTimer = 5;
+            if (enemy === monster) enemy.state = 'search';
+        }
+    }
+
+    function roomEntrance(room) {
+        return { N: { x: room.x + 2, y: room.y }, S: { x: room.x + 2, y: room.y + 5 },
+            W: { x: room.x, y: room.y + 2 }, E: { x: room.x + 5, y: room.y + 2 } }[room.entrance];
+    }
+
+    function resetSurvival() {
+        survival = { items: { scrap: 0, tool: 1, lockpick: 0, trap: 0, bottle: 2, ammo: 48, battery: 2, documents: 0 },
+            crouched: false, uv: false, battery: 100, hiddenBed: false, gunMods: clone(ownedGunMods), loaded: {}, reload: 0,
+            noise: null, objects: [], creatures: [], traps: [], eventClock: 35, event: '', eventLife: 0,
+            blackout: 0, elapsed: 0, rescued: false, transmitted: false, notes: [],
+            contracts: { documents: false, clean: false, rescue: false }, roomDamage: [], roomEntryHealth: {} };
+        if (gameMode === 'regular') {
+            MAZE_ROOMS.forEach((room, index) => {
+                survival.objects.push({ id: `drawer-${index}`, kind: 'drawer', room: index, x: room.x + 1.4, y: room.y + 1.5, used: false, decor: 'officeCabinet', icon: '🗄️', size: .5 });
+                survival.objects.push({ id: `glass-${index}`, kind: 'glass', room: index, x: room.x + 4.5, y: room.y + 2.5, used: false, decor: 'glass', icon: '✦', size: .4 });
+                survival.objects.push({ id: `furniture-${index}`, kind: 'furniture', room: index, x: room.x + 2.5, y: room.y + 4.5, used: false, decor: 'officeChair', icon: '📦', size: .6 });
+                const entrance = roomEntrance(room);
+                survival.objects.push({ id: `door-${index}`, kind: 'door', room: index, x: entrance.x + .5, y: entrance.y + .5, used: false, decor: 'fuse', icon: '🚪', size: .2 });
+            });
+            for (const index of [1, 5, 11]) {
+                const room = MAZE_ROOMS[index];
+                survival.objects.push({ id: `note-${index}`, kind: 'note', room: index, x: room.x + 4.5, y: room.y + 4.4, used: false, decor: 'journal', icon: '📜', size: .38 });
+            }
+            const theatre = MAZE_ROOMS[9];
+            survival.objects.push({ id: 'survivor', kind: 'survivor', room: 9, x: theatre.x + 4.4, y: theatre.y + 3.5, used: false, decor: 'hospitalBed', icon: '🩹', size: .8 });
+            for (const [index, kind] of [[8, 'blind'], [12, 'shy']]) {
+                const room = MAZE_ROOMS[index];
+                survival.creatures.push({ x: room.x + 4.5, y: room.y + 4.5, homeX: room.x + 4.5, homeY: room.y + 4.5,
+                    kind, active: true, hp: 110, maxHp: 110, stunTimer: 0, speed: kind === 'blind' ? 2.4 : 2.9, angle: 0, searchTimer: 0, soundTimer: 0 });
+            }
+        }
+        previousHealth = player.health;
+        checkpointClock = 0; runEnding = '';
+        document.getElementById('inventoryPanel').hidden = true;
+        document.getElementById('puzzleTools').replaceChildren();
+        updateSurvivalUI();
+    }
+
+    function updateSurvivalUI(rebuild = true) {
+        if (!survival) return;
+        document.getElementById('crouchBtn').setAttribute('aria-pressed', String(survival.crouched));
+        document.getElementById('uvBtn').setAttribute('aria-pressed', String(survival.uv));
+        document.getElementById('survivalStatus').textContent = `${survival.crouched ? 'CROUCH' : 'STANDING'} · BAG ${inventorySlots()}/12 · BAT ${Math.ceil(survival.battery)}% · ${survival.uv ? 'UV' : 'WHITE'}${survival.reload > 0 ? ' · RELOADING' : ''}`;
+        if (rebuild) {
+        document.getElementById('inventoryList').replaceChildren(...Object.keys(ITEM_NAMES).map(key => {
+            const row = document.createElement('div');
+            row.textContent = `${ITEM_NAMES[key]} ×${survival.items[key]} `;
+            const button = document.createElement('button');
+            button.textContent = 'DROP STACK'; button.disabled = survival.items[key] <= 0 || key === 'documents';
+            button.addEventListener('click', () => { if (gameState === 'playing' && survival.items[key] > 0 && key !== 'documents') { survival.items[key] = Math.max(0, survival.items[key] - STACK_SIZES[key]); updateSurvivalUI(); } });
+            row.appendChild(button); return row;
+        }));
+        const questRow = document.createElement('div');
+        questRow.textContent = `MEDKITS ×${medkits} · CODE ${player.hasCode.filter(Boolean).length}/4 · CAR KEY ${carKeyFound ? 'YES' : 'NO'}`;
+        document.getElementById('inventoryList').appendChild(questRow);
+        }
+        document.getElementById('contractStatus').textContent =
+            `DOCUMENTS ${survival.items.documents}/3 (${survival.contracts.documents ? 'PAID' : '120 credits'}) · CLEAN PUZZLE ${survival.contracts.clean ? 'PAID' : '75 credits'} · RESCUE ${survival.rescued ? 'DONE' : '160 credits + medkit'} · TRANSMISSION ${survival.transmitted ? 'SENT' : 'OFFLINE'}`;
+        document.getElementById('eventStatus').textContent = survival.event;
+        document.getElementById('storyLog').textContent = survival.notes.join('\n\n') || 'Find the three journals in Records, Archive and the Server Room. Rescue the patient in the Operating Theatre.';
+        document.getElementById('resumeRun').disabled = !hasCheckpoint();
+        document.getElementById('saveRun').disabled = gameMode !== 'regular' || !['house', 'outside'].includes(worldMode) || !!challengeMode || gameState !== 'playing';
+        document.getElementById('ammoStatus').textContent = isMelee(player.weapon) ? 'MELEE · NO AMMO' : `${survival.loaded[player.weapon] ?? magazineSize(player.weapon)} / ${magazineSize(player.weapon)} · RESERVE ${survival.items.ammo} · B reload`;
+    }
+
+    function toggleInventory() {
+        const panel = document.getElementById('inventoryPanel');
+        panel.hidden = !panel.hidden;
+        document.getElementById('inventoryBtn').setAttribute('aria-expanded', String(!panel.hidden));
+        updateSurvivalUI();
+    }
+
+    function craft(item) {
+        if (!survival || gameState !== 'playing' || !['trap', 'lockpick', 'bottle'].includes(item)) return;
+        const cost = { trap: 3, lockpick: 2, bottle: 1 }[item];
+        if (!survival.items.tool || survival.items.scrap < cost) { notify(`Need a tool kit and ${cost} scrap.`); return; }
+        const next = { ...survival.items, scrap: survival.items.scrap - cost, [item]: survival.items[item] + 1 };
+        if (inventorySlots(next) > 12) { notify('Not enough inventory space.'); return; }
+        survival.items = next; notify(`${ITEM_NAMES[item]} crafted.`); updateSurvivalUI();
+    }
+
+    function isMelee(weapon) { return ['knife', 'lightsaber'].includes(weapon); }
+    function magazineSize(weapon) {
+        const base = { doublebarrel: 2, shotgun: 4, revolver: 6, crossbow: 1, handcannon: 5, laser: 40, smg: 24, flamethrower: 30 }[weapon] || 12;
+        return base + (survival?.gunMods[weapon] === 'magazine' ? Math.ceil(base * .5) : 0);
+    }
+
+    function reloadWeapon() {
+        if (!survival || gameState !== 'playing' || survival.reload > 0 || isMelee(player.weapon)) return;
+        const loaded = survival.loaded[player.weapon] ?? magazineSize(player.weapon);
+        if (loaded >= magazineSize(player.weapon)) return;
+        if (!survival.items.ammo) { notify('No reserve ammunition. Use your knife or search drawers.'); return; }
+        survival.reload = 1.1; survival.reloadWeapon = player.weapon;
+        playSound('door'); updateSurvivalUI();
+    }
+
+    function prepareShot() {
+        if (!survival || isMelee(player.weapon)) return true;
+        if (survival.reload > 0) return false;
+        const loaded = survival.loaded[player.weapon] ?? magazineSize(player.weapon);
+        if (loaded <= 0) { notify('Magazine empty. B to reload; V to switch to knife.'); return false; }
+        survival.loaded[player.weapon] = loaded - 1;
+        emitNoise(player.x, player.y, player.weapon === 'silenced' ? 3 : 14, 'gun');
+        updateSurvivalUI(); return true;
+    }
+
+    function buyWeaponMod(mod) {
+        if (!survival || worldMode !== 'armory' || gameState !== 'playing' || !['scope', 'magazine', 'power'].includes(mod) || isMelee(player.weapon)) return;
+        if (survival.gunMods[player.weapon] === mod) return;
+        if (money < 90) { notify('A weapon mod costs 90 credits.'); return; }
+        money -= 90; survival.gunMods[player.weapon] = mod; ownedGunMods[player.weapon] = mod;
+        saveProgress(); updateArmoryUI(); updateSurvivalUI();
+        notify(`${mod.toUpperCase()} installed on ${WEAPON_DEFS[player.weapon].label}. One mod slot per weapon.`);
+    }
+
+    function toggleCrouch() {
+        if (!survival || gameState !== 'playing') return;
+        survival.crouched = !survival.crouched; updateSurvivalUI();
+    }
+
+    function toggleUV() {
+        if (!survival || !['playing', 'puzzle'].includes(gameState)) return;
+        survival.uv = !survival.uv;
+        if (survival.uv && survival.battery > 0) flashlightOn = true;
+        updateFlashlightUI(); updateSurvivalUI();
+        if (activePuzzle === 9 && gameState === 'puzzle') document.getElementById('uvClue').textContent = survival.uv && flashlightOn && survival.battery > 0 ? 'UV INSCRIPTION: 6284' : 'The surface looks blank.';
+    }
+
+    function replaceBattery() {
+        if (!survival || gameState !== 'playing' || !survival.items.battery || survival.battery >= 100) return;
+        survival.items.battery--; survival.battery = 100; flashlightOn = true;
+        updateFlashlightUI(); updateSurvivalUI();
+    }
+
+    function throwBottle() {
+        if (!survival || gameState !== 'playing' || !survival.items.bottle || worldMode !== 'house') return;
+        let x = player.x, y = player.y;
+        for (let distance = .5; distance <= 6; distance += .25) {
+            const nx = player.x + Math.cos(player.angle) * distance, ny = player.y + Math.sin(player.angle) * distance;
+            if (isWall(Math.floor(nx), Math.floor(ny))) break;
+            x = nx; y = ny;
+        }
+        survival.items.bottle--; emitNoise(x, y, 12, 'glass');
+        notify('Bottle shattered. Hunters investigate the noise.'); updateSurvivalUI();
+    }
+
+    function placeTrap() {
+        if (!survival || gameState !== 'playing' || !survival.items.trap || worldMode !== 'house') return;
+        survival.items.trap--; survival.traps.push({ x: player.x, y: player.y, active: true });
+        notify('Trap armed. Lure a creature across it.'); updateSurvivalUI();
+    }
+
+    function interactSurvival() {
+        if (!survival || gameMode !== 'regular' || worldMode !== 'house') return false;
+        if (survival.hiddenBed) { survival.hiddenBed = false; player.inCloset = false; notify('You crawl out from under the bed.'); return true; }
+        const roomIndex = currentRoomIndex(), room = MAZE_ROOMS[roomIndex];
+        if (room && survival.crouched && [6, 9].includes(roomIndex) && Math.hypot(player.x - room.x - 1.5, player.y - room.y - 1.5) < 1.5) {
+            player.inCloset = true; survival.hiddenBed = true; notify('Hidden under the bed. E to crawl out.'); return true;
+        }
+        const near = survival.objects.filter(object => !object.used && Math.hypot(player.x - object.x, player.y - object.y) < 1.25)
+            .sort((a, b) => Math.hypot(player.x - a.x, player.y - a.y) - Math.hypot(player.x - b.x, player.y - b.y))[0];
+        if (!near) return false;
+        if (near.kind === 'drawer') {
+            if (near.room % 2 && !near.unlocked) {
+                if (!survival.items.lockpick) { notify('Drawer locked. Craft a lockpick (2 scrap), then use E.'); return true; }
+                survival.items.lockpick--; near.unlocked = true;
+            }
+            if (!addItem('ammo', 12)) return true;
+            near.used = true; addItem('scrap', 1); emitNoise(near.x, near.y, 4, 'door'); notify('Drawer opened: 12 rounds and scrap (if space permits).');
+        } else if (near.kind === 'glass') {
+            near.used = true; emitNoise(near.x, near.y, 14, 'glass'); addItem('bottle', 1); notify('Glass shattered. Nearby hunters heard it.');
+        } else if (near.kind === 'furniture') {
+            const nx = near.x + Math.round(Math.cos(player.angle)), ny = near.y + Math.round(Math.sin(player.angle));
+            if (!canMoveTo(nx, ny, .3) || Math.hypot(nx - player.x, ny - player.y) < .8) { near.used = true; near.moved = false; emitNoise(near.x, near.y, 8, 'door'); notify('No space to push: furniture dismantled to clear the route.'); return true; }
+            near.x = nx; near.y = ny; near.moved = true; emitNoise(nx, ny, 6, 'door'); notify('Furniture moved. It blocks movement and can be pushed again.');
+        } else if (near.kind === 'door') {
+            const point = roomEntrance(MAZE_ROOMS[near.room]);
+            if (near.jammed) {
+                if (!survival.items.tool && !survival.items.lockpick) { notify('Need a tool kit or lockpick to release the jam. It clears after the event.'); return true; }
+                if (!survival.items.tool) survival.items.lockpick--;
+                near.jammed = false; map[point.y][point.x] = 0; notify('Door mechanism released.');
+            } else if (near.barricaded) {
+                near.barricaded = false; map[point.y][point.x] = 0; notify('Barricade removed.');
+            } else if (survival.items.scrap >= 2) {
+                if (Math.floor(player.x) === point.x && Math.floor(player.y) === point.y) { notify('Step away from the doorway first.'); return true; }
+                survival.items.scrap -= 2; near.barricaded = true; near.durability = 12; map[point.y][point.x] = 7; notify('Door barricaded. E removes it; hunters can break through.');
+            } else notify('Door barricade costs 2 scrap.');
+            playSound('door', near.x, near.y);
+        } else if (near.kind === 'note') {
+            if (!addItem('documents', 1)) return true;
+            near.used = true;
+            const notes = {
+                1: 'JOURNAL 1: The hospital experimented on patients. The blind hunter follows sound, even through walls. Crouch, and throw a bottle away from your route.',
+                5: 'JOURNAL 2: The tunnel creature fears a direct flashlight beam. The generators power a transmitter in the server room. Three documents can expose the experiment.',
+                11: 'AUDIO LOG 3: One patient is still alive in the operating theatre. Treat them, then send the evidence from the server terminal before leaving.'
+            };
+            survival.notes.push(notes[near.room]); notify(notes[near.room], 9); playSound('whisper', near.x, near.y);
+            if (near.room === 11 && audioEnabled && window.speechSynthesis && window.SpeechSynthesisUtterance) {
+                window.speechSynthesis.speak(new window.SpeechSynthesisUtterance(notes[near.room]));
+            }
+        } else if (near.kind === 'survivor') {
+            if (!medkits) { notify('The patient needs one medkit.'); return true; }
+            medkits--; survival.rescued = true; near.used = true; notify('Patient stabilized. They will meet you at the evacuation car.'); saveProgress();
+        }
+        checkContracts(); updateSurvivalUI(); return true;
+    }
+
+    function hurtPlayer(amount) {
+        const index = currentRoomIndex();
+        if (survival && index >= 0 && amount > 0 && !survival.roomDamage.includes(index)) survival.roomDamage.push(index);
+        player.health = Math.max(0, player.health - amount);
+        if (!player.health) gameState = 'lost';
+    }
+
+    function checkContracts() {
+        if (!survival) return;
+        if (survival.items.documents >= 3 && !survival.contracts.documents) {
+            survival.contracts.documents = true; awardMoney(120, 'evidence contract');
+        }
+        if (survival.rescued && !survival.contracts.rescue) {
+            survival.contracts.rescue = true; awardMoney(160, 'rescue contract');
+            if (medkits < 5 && inventorySlots(survival.items, medkits + 1) <= 12) medkits++;
+        }
+        if (!survival.contracts.clean && [...solvedRooms].some(index => survival.roomEntryHealth[index] !== undefined && !survival.roomDamage.includes(index))) {
+            survival.contracts.clean = true; awardMoney(75, 'clean-room contract');
+        }
+    }
+
+    function triggerWorldEvent(type) {
+        if (!survival || gameMode !== 'regular' || worldMode !== 'house') return;
+        const kind = type || ['blackout', 'jam', 'patrol'][Math.floor(Math.random() * 3)];
+        survival.eventLife = 22;
+        if (kind === 'blackout') { survival.blackout = 22; survival.event = 'POWER FAILURE · use your flashlight · 22s'; }
+        if (kind === 'jam') {
+            const doors = survival.objects.filter(object => object.kind === 'door' && !object.barricaded &&
+                Math.hypot(object.x - player.x, object.y - player.y) > 2);
+            const door = doors[Math.floor(Math.random() * doors.length)];
+            if (door) { const point = roomEntrance(MAZE_ROOMS[door.room]); door.jammed = true; map[point.y][point.x] = 7; }
+            survival.event = 'A DOOR JAMMED · use tools / lockpick or wait 22s';
+        }
+        if (kind === 'patrol') {
+            for (const hunter of roomHunters) { hunter.phase += Math.PI; hunter.lastSeenPlayer = { x: player.x, y: player.y }; hunter.searchTimer = 7; }
+            survival.event = 'RADIO INTERFERENCE · hunters changed patrol routes';
+        }
+        playSound('radio'); updateSurvivalUI();
+    }
+
+    function updateSurvival(dt) {
+        if (!survival || gameState !== 'playing') return;
+        survival.elapsed += dt;
+        if (player.health < previousHealth && currentRoomIndex() >= 0 && !survival.roomDamage.includes(currentRoomIndex())) survival.roomDamage.push(currentRoomIndex());
+        previousHealth = player.health;
+        const index = currentRoomIndex();
+        if (index >= 0 && survival.roomEntryHealth[index] === undefined) survival.roomEntryHealth[index] = player.health;
+        if (flashlightOn && worldMode !== 'armory') {
+            survival.battery = Math.max(0, survival.battery - dt * (survival.uv ? .65 : .22));
+            if (survival.battery === 0) { flashlightOn = false; survival.uv = false; updateFlashlightUI(); notify('Battery empty. Y installs a spare; batteries can be bought in the safe room.'); }
+        }
+        if (survival.reload > 0) {
+            survival.reload = Math.max(0, survival.reload - dt);
+            if (!survival.reload) {
+                const weapon = survival.reloadWeapon, loaded = survival.loaded[weapon] ?? 0;
+                const rounds = Math.min(magazineSize(weapon) - loaded, survival.items.ammo);
+                survival.loaded[weapon] = loaded + rounds; survival.items.ammo -= rounds;
+            }
+        }
+        if (survival.noise) { survival.noise.life -= dt; if (survival.noise.life <= 0) survival.noise = null; }
+        if (worldMode === 'house' && gameMode === 'regular') {
+            survival.eventClock -= dt;
+            if (survival.eventClock <= 0) { triggerWorldEvent(); survival.eventClock = 45 + Math.random() * 30; }
+            survival.blackout = Math.max(0, survival.blackout - dt);
+            survival.eventLife = Math.max(0, survival.eventLife - dt);
+            if (!survival.eventLife && survival.event) {
+                survival.event = '';
+                for (const door of survival.objects.filter(object => object.jammed)) { const point = roomEntrance(MAZE_ROOMS[door.room]); door.jammed = false; map[point.y][point.x] = 0; }
+            }
+            const moving = !player.inCloset && (keys.w || keys.s);
+            soundClock -= dt;
+            if (moving && soundClock <= 0) {
+                soundClock = survival.crouched ? .85 : player.sprinting ? .23 : .45;
+                emitNoise(player.x, player.y, survival.crouched ? 1.4 : player.sprinting ? 11 : 5);
+            }
+            updateSpecialCreatures(dt);
+            survival.breathClock = (survival.breathClock || 0) - dt;
+            if (survival.breathClock <= 0) {
+                survival.breathClock = 2;
+                const enemies = [monster, ...roomHunters].filter(enemy => enemy.active !== false);
+                enemies.sort((a,b) => Math.hypot(a.x-player.x,a.y-player.y)-Math.hypot(b.x-player.x,b.y-player.y));
+                if (enemies[0]) playSound('breath', enemies[0].x, enemies[0].y);
+                if (enemies[1]) playSound('step', enemies[1].x, enemies[1].y);
+            }
+            for (const door of survival.objects.filter(object => object.barricaded)) {
+                if ([monster, ...roomHunters, ...survival.creatures].some(enemy => enemy.active !== false && Math.hypot(enemy.x - door.x, enemy.y - door.y) < 1.5)) {
+                    door.durability -= dt;
+                    if (door.durability <= 0) { const point = roomEntrance(MAZE_ROOMS[door.room]); door.barricaded = false; map[point.y][point.x] = 0; emitNoise(door.x, door.y, 10, 'door'); }
+                }
+            }
+            const nearby = survival.objects.find(object => !object.used && Math.hypot(player.x - object.x, player.y - object.y) < 1.25);
+            if (nearby) document.getElementById('interactionHint').textContent = `E · ${nearby.kind.toUpperCase()}${nearby.kind === 'door' ? ' · barricade / release' : nearby.kind === 'furniture' ? ' · push' : ''}`;
+        }
+        checkContracts();
+        checkpointClock += dt;
+        if (checkpointClock > 8) {
+            checkpointClock = 0;
+            const danger = [monster, boss, ...roomHunters, ...stalkers, ...survival.creatures].some(enemy => enemy.active !== false && enemy.hp > 0 && Math.hypot(enemy.x - player.x, enemy.y - player.y) < 3);
+            if (!danger && player.health >= 25) saveCheckpoint(false);
+        }
+        survival.uiClock = (survival.uiClock || 0) + dt;
+        if (survival.uiClock > .35) { survival.uiClock = 0; updateSurvivalUI(false); }
+    }
+
+    function updateSpecialCreatures(dt) {
+        for (const enemy of survival.creatures) {
+            if (!enemy.active) continue;
+            enemy.stunTimer = Math.max(0, enemy.stunTimer - dt);
+            if (enemy.stunTimer > 0) continue;
+            const dx = player.x - enemy.x, dy = player.y - enemy.y, distance = Math.hypot(dx, dy);
+            const delta = Math.atan2(enemy.y - player.y, enemy.x - player.x) - player.angle;
+            const illuminated = flashlightOn && survival.battery > 0 && Math.cos(delta) > .85 && distance < 8 && lineOfSight(player.x, player.y, enemy.x, enemy.y);
+            let target = null;
+            if (enemy.kind === 'blind') {
+                const noise = survival.noise;
+                if (noise && Math.hypot(noise.x - enemy.x, noise.y - enemy.y) <= noise.radius) { enemy.target = { x: noise.x, y: noise.y }; enemy.searchTimer = 6; }
+                enemy.searchTimer = Math.max(0, enemy.searchTimer - dt);
+                target = enemy.searchTimer > 0 ? enemy.target : { x: enemy.homeX + Math.sin(survival.elapsed * .5) * .4, y: enemy.homeY };
+            } else if (illuminated) {
+                target = { x: enemy.x - dx, y: enemy.y - dy };
+            } else if (!player.inCloset && distance < (survival.crouched ? 3 : 8) && lineOfSight(enemy.x, enemy.y, player.x, player.y)) target = player;
+            if (target && Math.hypot(target.x - enemy.x, target.y - enemy.y) > .2) {
+                const next = enemy.kind === 'shy' && illuminated ? target : findNextPathPosition(enemy.x, enemy.y, target.x, target.y);
+                if (next) {
+                    const length = Math.hypot(next.x - enemy.x, next.y - enemy.y) || 1, step = Math.min(enemy.speed * dt, length);
+                    const nx = enemy.x + (next.x - enemy.x) / length * step, ny = enemy.y + (next.y - enemy.y) / length * step;
+                    if (canMoveTo(nx, enemy.y, .25)) enemy.x = nx;
+                    if (canMoveTo(enemy.x, ny, .25)) enemy.y = ny;
+                }
+            }
+            enemy.soundTimer -= dt;
+            if (enemy.soundTimer <= 0) { playSound('breath', enemy.x, enemy.y); enemy.soundTimer = 2.4; }
+            if (distance < .8 && !player.inCloset && !(enemy.kind === 'shy' && illuminated)) {
+                hurtPlayer(22 * dt); if (!player.health) gameState = 'lost';
+            }
+        }
+        for (const trap of survival.traps.filter(trap => trap.active)) {
+            const enemy = [monster, ...roomHunters, ...stalkers, ...keyGuards, ...survival.creatures].find(enemy => enemy.active !== false && Math.hypot(enemy.x - trap.x, enemy.y - trap.y) < .8);
+            if (enemy) { enemy.stunTimer = 7; trap.active = false; playSound('trap', trap.x, trap.y); notify('Trap triggered: creature stunned for 7 seconds.'); }
+        }
+    }
+
+    function hasCheckpoint() {
+        try { const value = JSON.parse(localStorage.getItem(CHECKPOINT_KEY) || 'null'); return value?.version === 2; } catch { return false; }
+    }
+
+    function saveCheckpoint(manual = true) {
+        if (!survival || gameMode !== 'regular' || challengeMode || !['house', 'outside'].includes(worldMode) || !['playing', 'puzzle'].includes(gameState) || player.health <= 0) return false;
+        const data = { version: 2, mode: selectedMode, worldMode, map, rooms: MAZE_ROOMS.map(({ x, y }) => ({ x, y })), fragments: fragmentPositions,
+            player, monster, stalkers, hunters: roomHunters, guards: keyGuards, boss, bossPhase, carKeyFound, doorPuzzleSolved,
+            solved: [...solvedRooms], discovered: [...discoveredRooms], salvaged: [...salvagedRooms], hinted: [...hintedRooms],
+            secretWall, greenDoorOpen, greenDoorClueFound, secretCacheClaimed, boosts: boostPickups, pickups: weaponPickups,
+            flashlightOn, survival, money, medkits, ownedWeapons, ownedUpgrades, ownedGunMods, disasterModesUnlocked };
+        try { localStorage.setItem(CHECKPOINT_KEY, JSON.stringify(data)); if (manual) notify('Checkpoint saved, including balance, equipment and supplies.'); return true; }
+        catch { if (manual) notify('Could not save checkpoint. Browser storage may be full.'); return false; }
+    }
+
+    function validCheckpoint(data) {
+        const point = value => value && Number.isFinite(value.x) && Number.isFinite(value.y) && value.x > 0 && value.y > 0 && value.x < MAP_W - 1 && value.y < MAP_H - 1;
+        const list = (value, max) => Array.isArray(value) && value.length <= max;
+        return data?.version === 2 && ['regular', 'nightmare'].includes(data.mode) && ['house', 'outside'].includes(data.worldMode) &&
+            list(data.map, MAP_H) && data.map.length === MAP_H && data.map.every(row => Array.isArray(row) && row.length === MAP_W && row.every(cell => Number.isInteger(cell) && cell >= 0 && cell <= 7)) &&
+            list(data.rooms, 13) && data.rooms.length === 13 && data.rooms.every(room => point(room) && room.x + 5 < MAP_W - 1 && room.y + 5 < MAP_H - 1) &&
+            list(data.fragments, 4) && data.fragments.length === 4 && data.fragments.every(point) && point(data.player) &&
+            Number.isFinite(data.player.health) && data.player.health > 0 && data.player.health <= 150 && Number.isFinite(data.player.angle) &&
+            Array.isArray(data.player.hasCode) && data.player.hasCode.length === 4 && data.player.hasCode.every(value => typeof value === 'boolean') &&
+            Object.hasOwn(WEAPON_DEFS, data.player.weapon) && data.player.weapons && Number.isFinite(data.player.speed) && Number.isFinite(data.player.sprintSpeed) && Number.isFinite(data.player.maxHealth) &&
+            point(data.monster) && point(data.boss) && [1, 2].includes(data.bossPhase) && point(data.secretWall) &&
+            list(data.guards, 4) && data.guards.length === 4 && list(data.boosts, 64) && data.boosts.every(point) && list(data.pickups, 32) && data.pickups.every(point) &&
+            ['stalkers', 'hunters', 'guards'].every(key => list(data[key], 20) && data[key].every(enemy => point(enemy) && Number.isFinite(enemy.hp))) &&
+            ['solved', 'discovered', 'salvaged', 'hinted'].every(key => list(data[key], 13) && data[key].every(index => Number.isInteger(index) && index >= 0 && index < 13)) &&
+            data.survival && list(data.survival.objects, 80) && data.survival.objects.every(object => point(object) && ['drawer', 'glass', 'furniture', 'door', 'note', 'survivor'].includes(object.kind) && Number.isInteger(object.room) && object.room >= 0 && object.room < 13) &&
+            list(data.survival.creatures, 8) && data.survival.creatures.every(enemy => point(enemy) && Number.isFinite(enemy.hp) && Number.isFinite(enemy.speed)) &&
+            list(data.survival.traps, 50) && data.survival.traps.every(point) && list(data.survival.notes, 8) && data.survival.notes.every(note => typeof note === 'string' && note.length < 1000) &&
+            data.survival.items && Object.keys(ITEM_NAMES).every(key => Number.isSafeInteger(data.survival.items[key]) && data.survival.items[key] >= 0 && data.survival.items[key] <= 999) &&
+            Number.isFinite(data.survival.battery) && data.survival.battery >= 0 && data.survival.battery <= 100 && data.survival.contracts &&
+            list(data.survival.roomDamage, 13) && data.survival.roomDamage.every(Number.isInteger) && data.survival.roomEntryHealth && Number.isFinite(data.survival.elapsed) && Number.isFinite(data.survival.eventClock) &&
+            data.survival.loaded && Object.entries(data.survival.loaded).every(([weapon, value]) => Object.hasOwn(WEAPON_DEFS, weapon) && Number.isSafeInteger(value) && value >= 0 && value <= 100) &&
+            data.survival.gunMods && Object.entries(data.survival.gunMods).every(([weapon, mod]) => Object.hasOwn(WEAPON_DEFS, weapon) && ['scope', 'magazine', 'power'].includes(mod)) &&
+            data.ownedGunMods && Object.entries(data.ownedGunMods).every(([weapon, mod]) => Object.hasOwn(WEAPON_DEFS, weapon) && ['scope', 'magazine', 'power'].includes(mod)) &&
+            Number.isSafeInteger(data.money) && data.money >= 0 && Number.isSafeInteger(data.medkits) && data.medkits >= 0 && data.medkits <= 5 && data.ownedWeapons && data.ownedUpgrades;
+    }
+
+    function resumeCheckpoint() {
+        let data;
+        try { data = JSON.parse(localStorage.getItem(CHECKPOINT_KEY) || 'null'); } catch { notify('Checkpoint is unreadable.'); return false; }
+        if (!validCheckpoint(data)) { notify('Checkpoint is missing or incompatible. Start a new run.'); return false; }
+        selectedMode = data.mode; resetGame(false);
+        MAZE_ROOMS.forEach((room, index) => relocateRoom(room, data.rooms[index]));
+        map = clone(data.map); fragmentPositions.splice(0, 4, ...data.fragments);
+        player = clone(data.player); monster = clone(data.monster); boss = clone(data.boss);
+        stalkers = clone(data.stalkers); roomHunters = clone(data.hunters);
+        keyGuards.forEach((guard, index) => Object.assign(guard, data.guards[index]));
+        bossPhase = data.bossPhase; worldMode = data.worldMode; carKeyFound = data.carKeyFound; doorPuzzleSolved = data.doorPuzzleSolved;
+        solvedRooms = new Set(data.solved); discoveredRooms = new Set(data.discovered); salvagedRooms = new Set(data.salvaged); hintedRooms = new Set(data.hinted);
+        secretWall = clone(data.secretWall); greenDoorOpen = data.greenDoorOpen; greenDoorClueFound = data.greenDoorClueFound; secretCacheClaimed = data.secretCacheClaimed;
+        boostPickups.splice(0, boostPickups.length, ...data.boosts); weaponPickups.splice(0, weaponPickups.length, ...data.pickups);
+        survival = clone(data.survival); flashlightOn = data.flashlightOn; money = data.money; medkits = data.medkits;
+        for (const weapon of Object.keys(ownedWeapons)) ownedWeapons[weapon] = weapon === 'knife' || data.ownedWeapons[weapon] === true;
+        for (const upgrade of Object.keys(ownedUpgrades)) ownedUpgrades[upgrade] = Math.max(0, Math.min(2, Number(data.ownedUpgrades[upgrade]) || 0));
+        for (const weapon of Object.keys(ownedGunMods)) delete ownedGunMods[weapon];
+        Object.assign(ownedGunMods, data.ownedGunMods || {});
+        disasterModesUnlocked = data.disasterModesUnlocked === true;
+        if (isWall(Math.floor(player.x), Math.floor(player.y))) { player.x = 3.5; player.y = 3.5; player.inCloset = false; survival.hiddenBed = false; }
+        gameState = 'playing'; previousHealth = player.health;
+        Object.keys(keys).forEach(key => { keys[key] = false; });
+        saveProgress(); updateCodeDisplay(); updateJournal(); updateArmoryUI(); updateFlashlightUI(); updateSurvivalUI();
+        notify('Checkpoint restored. Balance and supplies restored to the same moment.'); return true;
+    }
+
+    function endingName() {
+        if (!survival) return 'YOU ESCAPED!';
+        if (survival.rescued && survival.transmitted) return 'DAWN · EVERYONE SAVED';
+        if (survival.transmitted) return 'THE TRUTH GETS OUT';
+        if (survival.rescued) return 'NO ONE LEFT BEHIND';
+        return 'LONE SURVIVOR';
+    }
+
+    function randomizeFragmentLocations() {
+        const queue = [{ x: 3, y: 3 }], seen = new Set(['3,3']);
+        for (let head = 0; head < queue.length; head++) {
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const x = queue[head].x + dx, y = queue[head].y + dy;
+                if (!map[y] || map[y][x] === undefined || [1, 5, 6, 7].includes(map[y][x]) || seen.has(`${x},${y}`)) continue;
+                seen.add(`${x},${y}`); queue.push({ x, y });
+            }
+        }
+        const candidates = queue.filter(({ x, y }) => map[y][x] === 0 && Math.hypot(x - 3, y - 3) > 8 &&
+            !(x >= 7 && x <= 13 && y >= 7 && y <= 10) && !MAZE_ROOMS.some(room => x >= room.x && x < room.x + 6 && y >= room.y && y < room.y + 6));
+        for (let index = candidates.length - 1; index > 0; index--) {
+            const next = Math.floor(Math.random() * (index + 1));
+            [candidates[index], candidates[next]] = [candidates[next], candidates[index]];
+        }
+        for (const row of map) for (let x = 0; x < row.length; x++) if (row[x] === 4) row[x] = 0;
+        const positions = [];
+        for (const point of candidates) {
+            if (positions.every(other => Math.hypot(point.x - other.x, point.y - other.y) > 6)) positions.push(point);
+            if (positions.length === 4) break;
+        }
+        if (positions.length !== 4) throw new Error('Not enough reachable fragment locations.');
+        fragmentPositions.splice(0, 4, ...positions);
+        positions.forEach((point, index) => { map[point.y][point.x] = 4; keyGuards[index].x = point.x + .5; keyGuards[index].y = point.y + .5; });
+        for (const enemy of [monster, ...stalkers]) {
+            if (!isWall(Math.floor(enemy.x), Math.floor(enemy.y))) continue;
+            const floor = queue.filter(point => map[point.y][point.x] === 0 && Math.hypot(point.x - 3, point.y - 3) > 6 &&
+                !(point.x >= 7 && point.x <= 13 && point.y >= 7 && point.y <= 10));
+            floor.sort((a, b) => Math.hypot(a.x - enemy.x, a.y - enemy.y) - Math.hypot(b.x - enemy.x, b.y - enemy.y));
+            if (floor[0]) { enemy.x = floor[0].x + .5; enemy.y = floor[0].y + .5; }
+        }
+    }
+
+    function setupPuzzleTools(index) {
+        const tools = document.getElementById('puzzleTools'); tools.replaceChildren();
+        const input = document.getElementById('doorCodeInput'), puzzle = ROOM_PUZZLES[index];
+        if (puzzle.kind === 'wires') {
+            const legend = document.createElement('p'); legend.textContent = 'Terminals: 1 YELLOW · 2 RED · 3 BLUE'; tools.appendChild(legend);
+            const controls = ['RED', 'BLUE', 'YELLOW'].map(color => {
+                const label = document.createElement('label'); label.textContent = `${color} → `;
+                const select = document.createElement('select'); select.setAttribute('aria-label', `${color} wire terminal`);
+                for (const value of [0, 1, 2, 3]) { const option = document.createElement('option'); option.value = String(value); option.textContent = value ? `Terminal ${value}` : 'Disconnected'; select.appendChild(option); }
+                label.appendChild(select); tools.appendChild(label); return select;
+            });
+            controls.forEach(select => select.addEventListener('change', () => { input.value = controls.map(control => control.value).join(''); }));
+        }
+        if (puzzle.kind === 'mirror') {
+            const mirror = document.createElement('div'); mirror.className = 'mirror-clue'; mirror.textContent = '1385'; tools.appendChild(mirror);
+        }
+        if (puzzle.kind === 'uv') {
+            const clue = document.createElement('p'); clue.id = 'uvClue'; clue.className = 'uv-clue'; clue.textContent = survival.uv && flashlightOn ? 'UV INSCRIPTION: 6284' : 'The surface looks blank.';
+            const button = document.createElement('button'); button.type = 'button'; button.textContent = 'ULTRAVIOLET · U'; button.addEventListener('click', toggleUV);
+            tools.appendChild(clue); tools.appendChild(button);
+        }
+        if (puzzle.kind === 'radio') {
+            const frequency = document.createElement('input'); frequency.type = 'range'; frequency.min = '880'; frequency.max = '1080'; frequency.step = '1'; frequency.value = '880'; frequency.id = 'radioFrequency'; frequency.setAttribute('aria-label', 'Radio frequency');
+            const signal = document.createElement('p'); signal.textContent = '88.0 MHz · STATIC';
+            frequency.addEventListener('input', () => {
+                input.value = frequency.value; signal.textContent = `${(Number(frequency.value) / 10).toFixed(1)} MHz · ${frequency.value === '1047' ? 'SIGNAL LOCKED' : 'STATIC'}`;
+                if (frequency.value === '1047') playSound('radio');
+            });
+            tools.appendChild(frequency); tools.appendChild(signal);
+        }
+    }
+
     // ---------- HELPERS ----------
     function isWall(tx, ty) {
         if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return true;
         const cell = map[ty] && map[ty][tx];
         if (gameMode === 'halloween' && worldMode === 'outside' && cell === 2) return true;
-        return cell === 1 || cell === 5 || cell === 6;
+        return cell === 1 || cell === 5 || cell === 6 || cell === 7;
     }
 
     function canMoveTo(px, py, radius = 0.25) {
+        if (survival && worldMode === 'house' && gameMode === 'regular' && survival.objects.some(object => object.kind === 'furniture' && object.moved && Math.hypot(px - object.x, py - object.y) < radius + .28)) return false;
         const minX = Math.floor(px - radius);
         const maxX = Math.floor(px + radius);
         const minY = Math.floor(py - radius);
@@ -624,7 +1235,7 @@
 
     function updateJournal() {
         document.getElementById('missionProgress').textContent =
-            `POWER ${solvedRooms.has(7) ? 'ON' : 'OFF'} · WATER ${solvedRooms.has(6) ? 'CLEAN' : 'OFFLINE'} · PUZZLES ${solvedRooms.size}/8`;
+            `POWER ${solvedRooms.has(7) ? 'ON' : 'OFF'} · WATER ${solvedRooms.has(6) ? 'CLEAN' : 'OFFLINE'} · PUZZLES ${solvedRooms.size}/${MAZE_ROOMS.length}`;
         document.getElementById('journalRooms').replaceChildren(...MAZE_ROOMS.map((room, index) => {
             const row = document.createElement('li');
             row.textContent = `${solvedRooms.has(index) ? '✓' : discoveredRooms.has(index) ? '◉' : '○'} ${room.name} · ${ROOM_PUZZLES[index].reward} credits${index === 7 ? ' · restore power first' : index === 6 ? ' · restore water after power' : ' · optional cache'}`;
@@ -663,7 +1274,11 @@
         const room = MAZE_ROOMS[index];
         if (Math.hypot(player.x - room.x - 3.5, player.y - room.y - 3.5) < 1.6) {
             const puzzle = ROOM_PUZZLES[index];
-            if (solvedRooms.has(index)) return true;
+            if (solvedRooms.has(index)) {
+                if (index === 11 && survival.items.documents >= 3 && solvedRooms.has(7)) { survival.transmitted = true; notify('Evidence transmitted. The truth will reach the outside world.'); updateSurvivalUI(); saveCheckpoint(false); }
+                else if (index === 11) notify('Transmission needs three documents and restored generator power.');
+                return true;
+            }
             if (puzzle.requires !== undefined && !solvedRooms.has(puzzle.requires)) {
                 message = 'No power. Repair the GENERATOR ROOM circuit first.';
                 messageTimer = 3;
@@ -683,10 +1298,12 @@
             input.maxLength = 4;
             input.pattern = '[0-9]{1,4}';
             input.value = '';
+            setupPuzzleTools(index);
             input.focus();
             return true;
         }
         if (!salvagedRooms.has(index) && Math.hypot(player.x - room.x - 1.5, player.y - room.y - 3.5) < 1.3) {
+            if (!addItem('scrap', 2)) return true;
             salvagedRooms.add(index);
             awardMoney(30, 'copper salvage sold');
             return true;
@@ -697,17 +1314,23 @@
     function submitRoomPuzzle(entered) {
         if (gameState !== 'puzzle' || !Number.isInteger(activePuzzle) || solvedRooms.has(activePuzzle)) return;
         const puzzle = ROOM_PUZZLES[activePuzzle];
+        if (puzzle.kind === 'uv' && (!survival.uv || !flashlightOn || survival.battery <= 0)) {
+            document.getElementById('puzzleFeedback').textContent = 'Reveal the inscription with ultraviolet light (U) first.';
+            return;
+        }
         if (entered !== puzzle.answer) {
             document.getElementById('puzzleFeedback').textContent = 'The mechanism stays locked. Read the clue again; mistakes cost nothing.';
             document.getElementById('doorCodeInput').select();
             return;
         }
         solvedRooms.add(activePuzzle);
+        if (activePuzzle === 11 && survival.items.documents >= 3) { survival.transmitted = true; survival.notes.push('TRANSMISSION SENT: The evidence is outside the hospital.'); }
         document.getElementById('doorPuzzle').hidden = true;
         gameState = 'playing';
         awardMoney(puzzle.reward, 'puzzle solved');
         updateJournal();
         if (activePuzzle === 6) player.health = Math.min(player.maxHealth, player.health + 35);
+        checkContracts(); updateSurvivalUI(); saveCheckpoint(false);
         document.getElementById('objective').textContent = solvedRooms.has(7)
             ? solvedRooms.has(6) ? 'power + water restored → collect 4 fragments → enter their code at exit' : 'power restored → repair the medical filter'
             : 'repair generator → medical filter → 4 fragments → evacuation lock';
@@ -715,6 +1338,7 @@
 
     function buyMedkit() {
         if (gameMode !== 'regular' || worldMode !== 'armory' || money < 55 || medkits >= 5) return;
+        if (inventorySlots(survival.items, medkits + 1) > 12) { notify('No space for another medkit.'); return; }
         money -= 55;
         medkits++;
         saveProgress();
@@ -757,6 +1381,7 @@
             return;
         }
         activePuzzle = 'exit';
+        document.getElementById('puzzleTools').replaceChildren();
         document.getElementById('puzzleHint').hidden = true;
         gameState='puzzle';
         const puzzle=document.getElementById('doorPuzzle');
@@ -776,6 +1401,7 @@
     function openGreenDoorPuzzle() {
         if (greenDoorOpen || !secretWall.discovered || gameMode !== 'regular' || worldMode !== 'house') return;
         activePuzzle = 'greenDoor';
+        document.getElementById('puzzleTools').replaceChildren();
         document.getElementById('puzzleHint').hidden = true;
         gameState = 'puzzle';
         document.getElementById('doorPuzzle').hidden = false;
@@ -822,7 +1448,7 @@
         if (player.inCloset) return false;
         const dx = player.x - monster.x, dy = player.y - monster.y;
         const distance = Math.hypot(dx, dy);
-        if (distance > MONSTER_SIGHT_RANGE) return false;
+        if (distance > MONSTER_SIGHT_RANGE * (survival?.crouched ? .5 : 1)) return false;
         let angle = Math.atan2(dy, dx) - monster.angle;
         while (angle > Math.PI) angle -= Math.PI * 2;
         while (angle < -Math.PI) angle += Math.PI * 2;
@@ -834,7 +1460,7 @@
             const t = i / steps;
             const x = Math.floor(monster.x + dx * t), y = Math.floor(monster.y + dy * t);
             const cell = map[y] && map[y][x];
-            if (cell === undefined || cell === 1 || cell === 2 || cell === 3 || cell === 5 || cell === 6) return false;
+            if (cell === undefined || cell === 1 || cell === 2 || cell === 3 || cell === 5 || cell === 7 || cell === 6) return false;
         }
         return true;
     }
@@ -887,9 +1513,13 @@
         disasterCaches = [];
         document.body.classList.toggle('halloween', gameMode === 'halloween');
         document.body.classList.toggle('nightmare', nightmareMode);
-        map = baseMap.flatMap(row => [row.flatMap(cell => [cell, cell]), row.flatMap(cell => [cell, cell])]);
+        survival = null;
+        map = makeProceduralMap();
         map[EXIT_POS.y][EXIT_POS.x] = 2;
         if (gameMode === 'regular') {
+            shuffleAnnexRooms();
+            greenDoorOpen = false;
+            prepareSecretRoom();
             prepareMazeRooms();
             resetRoomHunters();
         } else {
@@ -940,6 +1570,7 @@
             const spawn=[[16.5,2.5],[26.5,3.5],[4.5,27.5],[14.5,15.5]][i];
             guard.x=spawn[0]; guard.y=spawn[1]; guard.hp=guard.maxHp; guard.active=true;
         });
+        if (gameMode === 'regular') randomizeFragmentLocations();
         shotCooldown = 0;
         muzzleFlash = 0;
         secretWeaponAnimationTimer = 0;
@@ -978,6 +1609,7 @@
             document.getElementById('monsterState').textContent = '👹 UNAWARE';
             document.getElementById('objective').textContent = 'find 4 code fragments → solve the red door puzzle → escape';
         }
+        resetSurvival();
         updateArmoryUI();
         updateDisasterModeButtons();
         updateJournal();
@@ -1033,8 +1665,11 @@
     function enterMazeFromArmory() {
         if (gameMode !== 'regular' || worldMode !== 'armory') return;
         const selectedWeapon = player.weapon;
+        const loadout = survival ? clone({ items: survival.items, gunMods: survival.gunMods }) : null;
         resetGame(false);
         player.weapon = selectedWeapon;
+        if (loadout) { survival.items = loadout.items; survival.gunMods = loadout.gunMods; }
+        saveCheckpoint(false); updateSurvivalUI();
         updateArmoryUI();
         message = 'Restore the generator, then the medical filter. J opens your journal.';
         messageTimer = 2.5;
@@ -1187,13 +1822,15 @@
 
     function useWeapon() {
         if (gameState !== 'playing' || player.inCloset || weaponCooldown > 0) return;
+        if (!prepareShot()) return;
         const activeWeapon = player.weapon in WEAPON_DEFS ? player.weapon : 'pistol';
         const weaponInfo = WEAPON_DEFS[activeWeapon];
-        weaponCooldown = weaponInfo.cooldown;
+        weaponCooldown = weaponInfo.cooldown * (survival.gunMods[activeWeapon] === 'magazine' ? 1.2 : survival.gunMods[activeWeapon] === 'power' ? 1.25 : 1);
         muzzleFlash = 0.11;
         screenShake = 0.35;
 
         const enemyList = [];
+        if (gameMode === 'regular' && worldMode === 'house') enemyList.push(...survival.creatures.map(entity => ({ entity, label: entity.kind === 'blind' ? 'Blind hunter' : 'Light-shy creature', type: 'special' })));
         if (gameMode === 'regular' && worldMode === 'house' && monster.active) enemyList.push({ entity: monster, label: 'Hunter', type: 'monster' });
         if (gameMode === 'regular' && worldMode === 'house') enemyList.push(...stalkers.map(entity => ({ entity, label: 'Stalker', type: 'stalker' })));
         if (gameMode === 'regular' && worldMode === 'house') enemyList.push(...roomHunters.map(entity => ({ entity, label: entity.name, type: 'roomHunter' })));
@@ -1211,13 +1848,13 @@
                 let angle = Math.atan2(dy, dx) - player.angle;
                 while (angle > Math.PI) angle -= Math.PI * 2;
                 while (angle < -Math.PI) angle += Math.PI * 2;
-                const reach = weaponInfo.range;
-                const aim = weaponInfo.aim;
+                const reach = weaponInfo.range * (survival.gunMods[activeWeapon] === 'scope' ? 1.4 : 1);
+                const aim = weaponInfo.aim * (survival.gunMods[activeWeapon] === 'scope' ? .65 : 1);
                 let clear = distance <= reach && Math.abs(angle) <= aim;
                 if (clear) for (let i = 1, steps = Math.ceil(distance * 12); i < steps; i++) {
                     const t = i / steps;
                     const cell = map[Math.floor(player.y + dy * t)]?.[Math.floor(player.x + dx * t)];
-                    if (cell === undefined || cell === 1 || cell === 2 || cell === 3 || cell === 6) { clear = false; break; }
+                    if (cell === undefined || cell === 1 || cell === 2 || cell === 3 || cell === 7 || cell === 6) { clear = false; break; }
                 }
                 return { ...target, distance, clear };
             })
@@ -1232,7 +1869,7 @@
 
         const target = targets[0];
         if (weaponInfo.effect !== 'stun') {
-            const damage = weaponInfo.damage;
+            const damage = weaponInfo.damage * (survival.gunMods[activeWeapon] === 'power' ? 1.3 : 1);
             if (target.type === 'boss' && gameMode === 'regular') {
                 damageBoss(damage);
                 if (boss.hp > 0) message = `Hit ${target.label}! ${boss.hp}/${boss.maxHp} HP`;
@@ -1242,7 +1879,7 @@
                 target.entity.hp = Math.max(0, target.entity.hp - damage);
                 if (target.entity.hp <= 0) {
                     target.entity.active = false;
-                    const reward = target.type === 'guard' ? 45 : target.type === 'stalker' ? 35 : target.type === 'roomHunter' ? 50 : target.type === 'monster' ? 70 : target.type === 'ghost' ? 80 : 0;
+                    const reward = target.type === 'special' ? 65 : target.type === 'guard' ? 45 : target.type === 'stalker' ? 35 : target.type === 'roomHunter' ? 50 : target.type === 'monster' ? 70 : target.type === 'ghost' ? 80 : 0;
                     if (reward) awardMoney(reward, `${target.label.toLowerCase()} defeated`);
                     message = `${weaponInfo.icon} ${target.label} defeated${reward ? ` · +${reward} credits` : ''}!`;
                     if (target.type === 'ghost') {
@@ -1303,6 +1940,7 @@
                 return;
             }
             gameState='won';
+            runEnding = gameMode === 'regular' ? endingName() : '';
             awardMoney(gameMode === 'regular' ? 200 : 150, 'escape bonus');
             message=`You escaped! +${gameMode === 'regular' ? 200 : 150} credits`;
             messageTimer=3;
@@ -1351,6 +1989,7 @@
     }
 
     function shootBoss() {
+        if (gameMode === 'regular' && !challengeMode) { useWeapon(); return; }
         if (gameState !== 'playing' || shotCooldown > 0) return;
         if (challengeMode) {
             message = challengeMode === 'tornado'
@@ -1485,7 +2124,7 @@
             let clear=true;
             for(let i=1,steps=Math.ceil(distance*12);i<steps;i++) {
                 const t=i/steps, cell=map[Math.floor(player.y+dy*t)]?.[Math.floor(player.x+dx*t)];
-                if(cell===undefined || cell===1 || cell===2 || cell===3 || cell===6) { clear=false; break; }
+                if(cell===undefined || cell===1 || cell===2 || cell===3 || cell===7 || cell===6) { clear=false; break; }
             }
             if(clear && distance<bestDistance) { target=guard; bestDistance=distance; }
         }
@@ -1521,7 +2160,7 @@
             }
         }
         if(distance<1.15) {
-            player.health=Math.max(0,player.health-24*dt);
+            hurtPlayer(24*dt);
             if(player.health<=0) { gameState='lost'; message='THE BOSS GOT YOU...'; }
         }
     }
@@ -1543,7 +2182,7 @@
                     if (canMoveTo(nx, ghostObj.y, 0.25)) ghostObj.x = nx;
                     if (canMoveTo(ghostObj.x, ny, 0.25)) ghostObj.y = ny;
                 } else {
-                    player.health = Math.max(0, player.health - 26 * dt);
+                    hurtPlayer(26 * dt);
                     if (player.health <= 0) {
                         gameState = 'lost';
                         message = 'THE GHOSTS CAUGHT YOU...';
@@ -1570,7 +2209,7 @@
             if(canMoveTo(nx,ghost.y,0.28)) ghost.x=nx;
             if(canMoveTo(ghost.x,ny,0.28)) ghost.y=ny;
         } else {
-            player.health=Math.max(0,player.health-26*dt);
+            hurtPlayer(26*dt);
             if(player.health<=0) { gameState='lost'; message='THE GHOST CAUGHT YOU...'; }
         }
     }
@@ -1578,6 +2217,7 @@
     // ---------- INTERACTION ----------
     function interact() {
         if (gameState !== 'playing') return;
+        if (interactSurvival()) return;
 
         if (gameMode === 'regular' && worldMode === 'armory') {
             enterMazeFromArmory();
@@ -1675,7 +2315,7 @@
                 if (canMoveTo(tornado.x, nextY, 0.35)) tornado.y = nextY;
             }
             if (distance < 2.1) {
-                player.health = Math.max(0, player.health - (distance < 1.1 ? 32 : 14) * dt);
+                hurtPlayer((distance < 1.1 ? 32 : 14) * dt);
                 screenShake = Math.max(screenShake, 0.08);
                 if (player.health <= 0) {
                     gameState = 'lost';
@@ -1687,7 +2327,7 @@
         } else {
             tsunamiFrontY = MAP_H - 1 - disasterElapsed * 0.85;
             if (player.y >= tsunamiFrontY - 0.6 && player.y > 3.8) {
-                player.health = Math.max(0, player.health - 48 * dt);
+                hurtPlayer(48 * dt);
                 screenShake = Math.max(screenShake, 0.12);
                 if (player.health <= 0) {
                     gameState = 'lost';
@@ -1837,6 +2477,7 @@
             for (let i = 0; i < fragmentPositions.length; i++) {
                 const fp = fragmentPositions[i];
                 if (fp.x === tx && fp.y === ty && !player.hasCode[i]) {
+                    if (!player.hasCode.some(Boolean) && inventorySlots() >= 12) { notify('Make one inventory slot for the code fragments.'); return; }
                     if(keyGuards[i].active) {
                         message='A guardian still protects this fragment! Shoot it first.';
                         messageTimer=1.8;
@@ -1917,7 +2558,7 @@
             const dy = player.y - monster.y;
             const dist = Math.hypot(dx, dy);
             if (dist < 0.85) {
-                player.health -= 42 * dt;
+                hurtPlayer(42 * dt);
                 if (player.health <= 0) {
                     player.health = 0;
                     gameState = 'lost';
@@ -1950,7 +2591,7 @@
             if(stalker.stunTimer>0) { stalker.stunTimer-=dt; continue; }
             stalker.phase+=dt;
             const dx=player.x-stalker.x, dy=player.y-stalker.y, distance=Math.hypot(dx,dy);
-            const sees=!player.inCloset && distance<7 && lineOfSight(stalker.x,stalker.y,player.x,player.y);
+            const sees=!player.inCloset && distance<(survival.crouched?3.5:7) && lineOfSight(stalker.x,stalker.y,player.x,player.y);
             let angle=sees ? Math.atan2(dy,dx) : stalker.angle+Math.sin(stalker.phase)*0.55;
             if(sees) stalker.angle=angle;
             const step=stalker.speed*(sees?1:0.42)*dt;
@@ -1958,7 +2599,7 @@
             if(canMoveTo(nx,stalker.y,0.26)) stalker.x=nx;
             if(canMoveTo(stalker.x,ny,0.26)) stalker.y=ny;
             if(sees && distance<0.75) {
-                player.health=Math.max(0,player.health-22*dt);
+                hurtPlayer(22*dt);
                 if(player.health<=0) { gameState='lost'; message='THE STALKERS GOT YOU...'; }
             }
         }
@@ -2010,7 +2651,7 @@
             hunter.phase += dt;
             const dx = player.x - hunter.x, dy = player.y - hunter.y;
             const distance = Math.hypot(dx, dy);
-            const seesPlayer = !player.inCloset && distance < 8 && lineOfSight(hunter.x, hunter.y, player.x, player.y);
+            const seesPlayer = !player.inCloset && distance < (survival.crouched ? 4 : 8) && lineOfSight(hunter.x, hunter.y, player.x, player.y);
             if (seesPlayer) {
                 hunter.lastSeenPlayer = { x: player.x, y: player.y };
                 hunter.searchTimer = 4;
@@ -2050,7 +2691,7 @@
             }
 
             if (seesPlayer && distance < 0.82) {
-                player.health = Math.max(0, player.health - 24 * dt);
+                hurtPlayer(24 * dt);
                 if (player.health <= 0) {
                     gameState = 'lost';
                     message = `${hunter.name} got you...`;
@@ -2063,6 +2704,7 @@
         if(gameState!=='playing' || worldMode!=='house' || player.inCloset || gameMode!=='regular') return;
         for(const guard of keyGuards) {
             if(!guard.active) continue;
+            if(guard.stunTimer>0) { guard.stunTimer=Math.max(0,guard.stunTimer-dt); continue; }
             const dx=player.x-guard.x, dy=player.y-guard.y, distance=Math.hypot(dx,dy);
             if(distance<7 && lineOfSight(guard.x,guard.y,player.x,player.y)) {
                 guard.angle=Math.atan2(dy,dx);
@@ -2071,7 +2713,7 @@
                     if(canMoveTo(nx,guard.y,0.27)) guard.x=nx;
                     if(canMoveTo(guard.x,ny,0.27)) guard.y=ny;
                 } else {
-                    player.health=Math.max(0,player.health-18*dt);
+                    hurtPlayer(18*dt);
                     if(player.health<=0) { gameState='lost'; message='A KEY GUARDIAN GOT YOU...'; }
                 }
             } else guard.angle+=0.25*dt;
@@ -2082,7 +2724,7 @@
         const dx=x2-x1, dy=y2-y1, steps=Math.ceil(Math.hypot(dx,dy)*10);
         for(let i=1;i<steps;i++) {
             const t=i/steps, cell=map[Math.floor(y1+dy*t)]?.[Math.floor(x1+dx*t)];
-            if (cell === undefined || cell === 1 || cell === 2 || cell === 3 || cell === 6) return false;
+            if (cell === undefined || cell === 1 || cell === 2 || cell === 3 || cell === 7 || cell === 6) return false;
         }
         return true;
     }
@@ -2106,9 +2748,10 @@
             moveX /= len;
             moveY /= len;
 
-            player.sprinting = keys.shift;
+            player.sprinting = keys.shift && !survival.crouched;
             const boostMod = powerUpTimer > 0 ? 1.35 : 1;
-            const spd = (player.sprinting ? player.sprintSpeed : player.speed) * boostMod;
+            const wet = currentRoomIndex() === 12 && !solvedRooms.has(12) ? .55 : 1;
+            const spd = (player.sprinting ? player.sprintSpeed : player.speed) * boostMod * (survival.crouched ? .42 : 1) * wet;
             const step = spd * dt;
 
             const newX = player.x + moveX * step;
@@ -2135,7 +2778,7 @@
                 document.getElementById('objective').textContent='car key found → leave through the front door and reach the car';
             }
 
-            if (gameMode==='regular' && challengeMode === null && worldMode === 'outside' && !carKeyFound && Math.hypot(player.x-CAR_KEY_POS.x,player.y-CAR_KEY_POS.y) < 0.75) {
+            if (gameMode==='regular' && challengeMode === null && worldMode === 'outside' && !carKeyFound && inventorySlots() < 12 && Math.hypot(player.x-CAR_KEY_POS.x,player.y-CAR_KEY_POS.y) < 0.75) {
                 carKeyFound = true;
                 message = boss.hp > 0 ? '🔑 Car key found! Defeat the boss, then use F at the car.' : '🔑 Car key found! Get to the car and press F.';
                 messageTimer = 3;
@@ -2760,23 +3403,25 @@
 
     function toggleFlashlight() {
         if (gameState !== 'playing') return;
+        if (!flashlightOn && survival && survival.battery <= 0) { notify('Battery empty. Press Y to replace it.'); return; }
         flashlightOn = !flashlightOn;
         updateFlashlightUI();
     }
 
     function drawFlashlightOverlay() {
         if (worldMode === 'armory') return;
-        if (!nightmareMode && gameMode !== 'halloween' && !flashlightOn) return;
+        const blackout = survival && survival.blackout > 0;
+        if (!nightmareMode && !blackout && gameMode !== 'halloween' && !flashlightOn) return;
         const x = canvas.width * 0.52;
         const y = canvas.height * 0.52;
-        if (nightmareMode) {
+        if (nightmareMode || blackout) {
             ctx.save();
             ctx.shadowBlur = 0;
             if (flashlightOn) {
                 ctx.translate(x, y);
                 ctx.scale(1, .78);
                 const beam = ctx.createRadialGradient(0, 0, 8, 0, 0, canvas.width * .34);
-                beam.addColorStop(0, 'rgba(0,0,0,.04)');
+                beam.addColorStop(0, survival.uv ? 'rgba(70,0,110,.2)' : 'rgba(0,0,0,.04)');
                 beam.addColorStop(.22, 'rgba(0,0,0,.12)');
                 beam.addColorStop(.48, 'rgba(0,0,0,.55)');
                 beam.addColorStop(.75, 'rgba(0,0,0,.97)');
@@ -2796,8 +3441,8 @@
             return;
         }
         const flashlight = ctx.createRadialGradient(x, y, 30, x, y, canvas.width * 0.7);
-        flashlight.addColorStop(0, 'rgba(255, 246, 200, 0.18)');
-        flashlight.addColorStop(0.18, 'rgba(255, 223, 120, 0.12)');
+        flashlight.addColorStop(0, survival?.uv ? 'rgba(154,74,255,.25)' : 'rgba(255, 246, 200, 0.18)');
+        flashlight.addColorStop(0.18, survival?.uv ? 'rgba(132,43,235,.15)' : 'rgba(255, 223, 120, 0.12)');
         flashlight.addColorStop(0.48, 'rgba(255, 210, 90, 0.06)');
         flashlight.addColorStop(1, 'rgba(0,0,0,0.9)');
         ctx.fillStyle = flashlight;
@@ -2965,13 +3610,13 @@
             let sideX = (rx < 0 ? player.x - tx : tx + 1 - player.x) * ddx;
             let sideY = (ry < 0 ? player.y - ty : ty + 1 - player.y) * ddy;
             let side = 0, cell = 0, dist = 30;
-            for (let i = 0; i < 48; i++) {
+            for (let i = 0; i < MAP_W + MAP_H; i++) {
                 if (sideX < sideY) { sideX += ddx; tx += stepX; side = 0; }
                 else { sideY += ddy; ty += stepY; side = 1; }
                 // Empty floor is 0, so don't use `|| 1` here: that made every
                 // open tile look like a wall and filled the view with one color.
                 cell = map[ty] && map[ty][tx] !== undefined ? map[ty][tx] : 1;
-                if (cell === 1 || cell === 2 || cell === 3 || cell === 5 || cell === 6) { dist = side ? sideY - ddy : sideX - ddx; break; }
+                if (cell === 1 || cell === 2 || cell === 3 || cell === 5 || cell === 7 || cell === 6) { dist = side ? sideY - ddy : sideX - ddx; break; }
             }
             const wallCoordinate = side === 0 ? player.y + dist * ry : player.x + dist * rx;
             const wallU = wallCoordinate - Math.floor(wallCoordinate);
@@ -3188,6 +3833,11 @@
                 }
             }
         }
+        if (survival && worldMode === 'house' && gameMode === 'regular') {
+            things.push(...survival.objects.filter(object => !object.used || ['drawer', 'glass'].includes(object.kind)).map(object => ({ ...object, decor: object.kind === 'glass' && !object.used ? 'glassPanel' : object.decor, glow: object.kind === 'note' ? '#d8c27b' : '#9db3a5' })));
+            things.push(...survival.creatures.filter(enemy => enemy.active).map(enemy => ({ x:enemy.x,y:enemy.y,icon:enemy.kind==='blind'?'👾':'👻',size:.8,glow:enemy.kind==='blind'?'#dd9f82':'#9ce6e5',hasEyes:enemy.kind!=='blind' })));
+            things.push(...survival.traps.filter(trap => trap.active).map(trap => ({...trap,icon:'🦴',size:.25,glow:'#c9b789'})));
+        }
         things.sort((a,b)=>Math.hypot(b.x-player.x,b.y-player.y)-Math.hypot(a.x-player.x,a.y-player.y));
         for (const obj of things) {
             const dx=obj.x-player.x, dy=obj.y-player.y, dist=Math.hypot(dx,dy);
@@ -3218,6 +3868,15 @@
             const artworkDrawn = drawArtwork(obj, x, spriteY, size, depth, dist);
             if (artworkDrawn) {
                 // Artwork replaces the matching procedural sprite.
+                if (obj.kind === 'drawer' && obj.used) {
+                    ctx.fillStyle = '#0b0d0c'; ctx.fillRect(x-size*.24,spriteY+size*.05,size*.48,size*.17);
+                    ctx.fillStyle = '#69716a'; ctx.fillRect(x-size*.24,spriteY+size*.2,size*.48,size*.08);
+                    ctx.fillStyle = '#b5a778'; ctx.fillRect(x-size*.06,spriteY+size*.22,size*.12,size*.025);
+                }
+            } else if (obj.decor === 'glassPanel') {
+                ctx.fillStyle='rgba(139,220,235,.24)'; ctx.fillRect(x-size*.4,spriteY-size*.5,size*.8,size);
+                ctx.strokeStyle='#a5d5d9'; ctx.lineWidth=2; ctx.strokeRect(x-size*.4,spriteY-size*.5,size*.8,size);
+                ctx.beginPath(); ctx.moveTo(x-size*.25,spriteY+size*.15); ctx.lineTo(x+size*.2,spriteY-size*.3); ctx.stroke();
             } else if (obj.decor === 'officeSign') {
                 const signWidth = size * 3;
                 const signHeight = size * 0.72;
@@ -3516,6 +4175,11 @@
             }
             ctx.shadowBlur=0; ctx.globalAlpha=1;
         }
+        if (currentRoomIndex() === 12 && !solvedRooms.has(12)) {
+            ctx.fillStyle='rgba(25,92,116,.24)'; ctx.fillRect(0,h*.62,w,h*.38);
+            ctx.strokeStyle='rgba(118,203,213,.22)';
+            for(let line=0;line<8;line++) {const yy=h*.65+line*18+Math.sin(now*.001+line)*3;ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(w,yy+Math.sin(line)*5);ctx.stroke();}
+        }
         // Dark vignette keeps the flashlight beam clear and the edges threatening.
         const vignette=ctx.createRadialGradient(w/2,horizon,w*.08,w/2,horizon,w*.75);
         vignette.addColorStop(0,'rgba(0,0,0,0)'); vignette.addColorStop(.55,'rgba(0,0,0,.2)'); vignette.addColorStop(1,'rgba(0,0,0,.88)');
@@ -3612,7 +4276,7 @@
             ? (halloweenStage==='house'?'RADAR · GHOST':'RADAR · SCARECROW')
             : (worldMode==='armory'?'RADAR · SAFE ROOM':worldMode==='house'?'RADAR · RED = SIGHT':'RADAR · RED = BOSS');
         ctx.fillText(radarTitle,radarX+7,radarY+5);
-        const radarScale=4.1, mapPixel=MAP_W*radarScale, mapX=radarX+(radarSize-mapPixel)/2, mapY=radarY+19;
+        const radarScale=Math.min((radarSize-14)/MAP_W,(radarSize-40)/MAP_H), mapPixel=MAP_W*radarScale, mapX=radarX+(radarSize-mapPixel)/2, mapY=radarY+19;
         for(let my=0;my<MAP_H;my++) for(let mx=0;mx<MAP_W;mx++) {
             if(map[my][mx]===1) { ctx.fillStyle='rgba(156,173,158,.52)'; ctx.fillRect(mapX+mx*radarScale,mapY+my*radarScale,radarScale,radarScale); }
         }
@@ -3736,7 +4400,7 @@
                 ? 'TORNADO ESCAPED!'
                 : challengeMode === 'tsunami'
                     ? 'YOU REACHED HIGH GROUND!'
-                    : gameMode === 'halloween' ? 'YOU ESCAPED HALLOWEEN!' : 'YOU ESCAPED!';
+                    : gameMode === 'halloween' ? 'YOU ESCAPED HALLOWEEN!' : (runEnding || 'YOU ESCAPED!');
             ctx.fillText(victoryTitle, w/2, 280);
             ctx.font = 'bold 22px "Courier New"';
             ctx.fillStyle = '#ccc';
@@ -3785,6 +4449,7 @@
             updateKeyGuards(dt);
             updateBoss(dt);
             updateGhost(dt);
+            updateSurvival(dt);
             if (captureFX) {
                 captureFX.life -= dt;
                 if (captureFX.life <= 0) captureFX = null;
@@ -3838,8 +4503,9 @@
 
     window.addEventListener('keydown', (e) => {
         if(gameState==='puzzle') {
+            if(e.key.toLowerCase()==='u' && !e.repeat) { toggleUV(); e.preventDefault(); return; }
             if(e.key==='Escape') cancelDoorPuzzle();
-            if(e.target===document.getElementById('doorCodeInput')) e.stopPropagation();
+            if(['INPUT','SELECT','BUTTON'].includes(e.target.tagName)) e.stopPropagation();
             else { e.preventDefault(); e.stopPropagation(); }
             return;
         }
@@ -3877,6 +4543,22 @@
         } else if (key === 't' && !e.repeat) {
             toggleFlashlight();
             e.preventDefault();
+        } else if (key === 'i' && !e.repeat) {
+            toggleInventory(); e.preventDefault();
+        } else if (key === 'c' && !e.repeat) {
+            toggleCrouch(); e.preventDefault();
+        } else if (key === 'q' && !e.repeat) {
+            throwBottle(); e.preventDefault();
+        } else if (key === 'x' && !e.repeat) {
+            placeTrap(); e.preventDefault();
+        } else if (key === 'b' && !e.repeat) {
+            reloadWeapon(); e.preventDefault();
+        } else if (key === 'u' && !e.repeat) {
+            toggleUV(); e.preventDefault();
+        } else if (key === 'y' && !e.repeat) {
+            replaceBattery(); e.preventDefault();
+        } else if (key === 'k' && !e.repeat) {
+            saveCheckpoint(); e.preventDefault();
         } else if (key === 'r') {
             resetGame();
             e.preventDefault();
@@ -4010,6 +4692,33 @@
     canvas.addEventListener('mousedown', (e) => {
         if (e.button === 0) shootBoss();
     });
+
+    window.addEventListener('pointerdown', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+    document.getElementById('inventoryBtn').addEventListener('click', toggleInventory);
+    document.getElementById('interactBtn').addEventListener('click', interact);
+    document.getElementById('crouchBtn').addEventListener('click', toggleCrouch);
+    document.getElementById('bottleBtn').addEventListener('click', throwBottle);
+    document.getElementById('trapBtn').addEventListener('click', placeTrap);
+    document.getElementById('reloadBtn').addEventListener('click', reloadWeapon);
+    document.getElementById('uvBtn').addEventListener('click', toggleUV);
+    document.getElementById('batteryBtn').addEventListener('click', replaceBattery);
+    document.getElementById('saveRun').addEventListener('click', () => { saveCheckpoint(); updateSurvivalUI(); });
+    document.getElementById('resumeRun').addEventListener('click', resumeCheckpoint);
+    document.getElementById('audioBtn').addEventListener('click', () => {
+        audioEnabled = !audioEnabled;
+        document.getElementById('audioBtn').textContent = audioEnabled ? 'SOUND ON' : 'SOUND OFF';
+        document.getElementById('audioBtn').setAttribute('aria-pressed', String(audioEnabled));
+        if (audioEnabled) unlockAudio();
+        else { if (audioContext) audioContext.suspend().catch(() => {}); window.speechSynthesis?.cancel(); }
+    });
+    document.querySelectorAll('[data-craft]').forEach(button => button.addEventListener('click', () => craft(button.dataset.craft)));
+    document.querySelectorAll('[data-weapon-mod]').forEach(button => button.addEventListener('click', () => buyWeaponMod(button.dataset.weaponMod)));
+    document.querySelectorAll('[data-buy-supply]').forEach(button => button.addEventListener('click', () => {
+        const item = button.dataset.buySupply, price = item === 'ammo' ? 25 : 20;
+        if (worldMode !== 'armory' || gameState !== 'playing' || money < price) return;
+        if (addItem(item, item === 'ammo' ? 24 : 1)) { money -= price; saveProgress(); updateArmoryUI(); }
+    }));
 
     // Initialize & start
     resetGame();

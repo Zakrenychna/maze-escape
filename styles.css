@@ -27,6 +27,21 @@ body {
 .mission-toolbar button { font-size: .72rem; padding: 8px 12px; }
 .mission-journal { max-width: 960px; padding: 20px; margin: 12px auto; border: 1px solid #756341; border-radius: 12px; color: #c8bfab; background: #181913; font-size: .82rem; line-height: 1.7; }
 .mission-journal[hidden] { display: none; }
+.survival-readout { display:flex; flex-wrap:wrap; gap:8px 20px; max-width:960px; margin:8px auto; color:#b7c5ac; font-size:.74rem; }
+.survival-readout #eventStatus { color:#f0b788; }
+.survival-actions { display:flex; flex-wrap:wrap; gap:7px; max-width:960px; margin:10px auto; }
+.survival-actions button { padding:8px 11px; font-size:.69rem; letter-spacing:0; }
+.survival-actions small { display:block; margin-top:4px; font-weight:normal; }
+.inventory-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(225px,1fr)); gap:8px; margin:12px 0; }
+.inventory-list button { font-size:.62rem; padding:5px 8px; }
+.story-log { white-space:pre-line; }
+.puzzle-tools { display:grid; gap:10px; margin:12px 0; }
+.puzzle-tools label { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.puzzle-tools select { min-width:130px; color:#eee; background:#17201d; padding:9px; border:1px solid #668578; border-radius:7px; }
+.puzzle-tools input[type="range"] { width:100%; padding:0; }
+.mirror-clue { transform:scaleX(-1); background:linear-gradient(135deg,#5a6b70,#15282e); border:5px solid #697477; border-radius:9px; color:#eee; font-size:2.2rem; letter-spacing:12px; padding:10px; }
+.uv-clue { color:#d1a2ff !important; text-shadow:0 0 12px #a05dff; }
+.puzzle-card { max-height:92vh; overflow-y:auto; }
 .mission-journal h2 { font-size: 1rem; color: #eed29d; }
 .mission-journal p { margin: 8px 0; }
 .mission-journal ul { padding-left: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 20px; }

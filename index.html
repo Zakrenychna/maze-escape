@@ -51,6 +51,13 @@
         </div>
         <h3 class="upgrade-heading">FIELD SUPPLIES</h3>
         <button type="button" id="buyMedkit">FIRST AID · 55 CREDITS <small>Restore 40 HP with H · carry up to 5 · kept between runs</small></button>
+        <div class="survival-actions">
+            <button type="button" data-buy-supply="ammo">24 ROUNDS · 25 CREDITS</button>
+            <button type="button" data-buy-supply="battery">BATTERY · 20 CREDITS</button>
+            <button type="button" data-weapon-mod="scope">SCOPE · 90 <small>+40% range, narrower aim window</small></button>
+            <button type="button" data-weapon-mod="magazine">MAGAZINE · 90 <small>+50% capacity, 20% slower fire</small></button>
+            <button type="button" data-weapon-mod="power">POWER · 90 <small>+30% damage, 25% slower fire</small></button>
+        </div>
         <div class="armory-footer">
             <span>Choose a weapon, then click, press G, or use SPACE to attack. Press V to cycle owned weapons.</span>
             <button type="button" id="enterMazeBtn">ENTER THE MAZE →</button>
@@ -63,12 +70,34 @@
         <button type="button" id="flashlightBtn" aria-pressed="false">FLASHLIGHT OFF · T</button>
         <button type="button" id="useMedkit">FIRST AID <span id="medkitCount">1</span> · H</button>
         <button type="button" id="journalBtn" aria-expanded="false" aria-controls="missionJournal">JOURNAL · J</button>
+        <button type="button" id="inventoryBtn" aria-expanded="false" aria-controls="inventoryPanel">INVENTORY · I</button>
     </div>
+    <div class="survival-readout"><span id="survivalStatus"></span><span id="ammoStatus"></span><span id="eventStatus" role="status"></span></div>
+    <div class="survival-actions" aria-label="Survival controls">
+        <button type="button" id="interactBtn">INTERACT · E</button>
+        <button type="button" id="crouchBtn">CROUCH · C</button><button type="button" id="bottleBtn">THROW BOTTLE · Q</button>
+        <button type="button" id="trapBtn">PLACE TRAP · X</button><button type="button" id="reloadBtn">RELOAD · B</button>
+        <button type="button" id="uvBtn">UV LIGHT · U</button><button type="button" id="batteryBtn">NEW BATTERY · Y</button>
+        <button type="button" id="audioBtn" aria-pressed="true">SOUND ON</button>
+        <button type="button" id="saveRun">SAVE CHECKPOINT · K</button><button type="button" id="resumeRun">CONTINUE CHECKPOINT</button>
+    </div>
+    <section id="inventoryPanel" class="mission-journal" hidden>
+        <h2>BACKPACK · 12 SLOTS</h2><p>Stacks: 24 rounds, 4 scrap, 3 bottles, 2 batteries, 3 lockpicks, 2 traps. Each medkit takes one slot. Fragments and the car key each need one slot. The world keeps moving while your bag is open.</p>
+        <div id="inventoryList" class="inventory-list"></div>
+        <h3>CRAFT · tool kit required</h3><div class="survival-actions">
+            <button type="button" data-craft="lockpick">LOCKPICK · 2 SCRAP</button><button type="button" data-craft="trap">TRAP · 3 SCRAP</button><button type="button" data-craft="bottle">NOISE BOTTLE · 1 SCRAP</button>
+        </div>
+        <p>Use E at a drawer, glass, furniture, doorway, journal or patient. Crouch and use E at the medical or operating bed to hide. Doors need 2 scrap to barricade; E removes it.</p>
+        <p>Checkpoints restore the entire saved timeline, including credits, purchases, ammunition and medkits. Purchases made after that point are rolled back. Autosave every 8 seconds when out of immediate danger; K saves immediately.</p>
+    </section>
     <section id="missionJournal" class="mission-journal" hidden>
         <h2>EVACUATION JOURNAL</h2>
         <p>1. Repair the generator. 2. Restore water in the medical lab. 3. Collect all four guarded fragments. 4. Enter their digits in HUD order at the red exit. Defeat the boss, take the key and reach the car.</p>
         <p>Amber objects are puzzle terminals: approach and press E. Copper bundles sell for 30 credits with E. First visits pay 20; each cache and puzzle pays once per run. Hints cost 15 credits once per puzzle; wrong answers are free. The world pauses while a puzzle is open.</p>
         <ul id="journalRooms"></ul>
+        <h3>CONTRACTS</h3><p id="contractStatus"></p>
+        <h3>STORY / AUDIO LOGS</h3><p id="storyLog" class="story-log"></p>
+        <p>Collect all three documents, restore power, then use the solved server terminal to transmit evidence. Stabilize the operating-theatre patient with a medkit. These choices determine your ending.</p>
     </section>
     <div class="movement-pad" role="group" aria-label="Hold to move and turn">
         <button type="button" data-movement-key="w" aria-label="Move forward">▲</button>
@@ -90,7 +119,9 @@
         <span><kbd>W</kbd><kbd>S</kbd> move · <kbd>A</kbd><kbd>D</kbd> turn</span>
         <span><kbd>E</kbd> interact / hide · <kbd>SPACE</kbd> attack with equipped weapon</span>
         <span><kbd>CLICK</kbd> / <kbd>G</kbd> attack · <kbd>V</kbd> switch weapons</span>
-        <span><kbd>J</kbd> journal · <kbd>H</kbd> first aid</span>
+        <span><kbd>I</kbd> inventory · <kbd>J</kbd> journal · <kbd>H</kbd> first aid</span>
+        <span><kbd>C</kbd> crouch · <kbd>Q</kbd> bottle · <kbd>X</kbd> trap · <kbd>B</kbd> reload</span>
+        <span><kbd>U</kbd> UV · <kbd>Y</kbd> battery · <kbd>K</kbd> checkpoint</span>
         <span><kbd>T</kbd> toggle flashlight</span>
         <span><kbd>F</kbd> use car</span>
         <span><kbd>SHIFT</kbd> sprint</span>
@@ -100,7 +131,7 @@
     <div class="field-notes" aria-label="Mission details and survival tips">
         <section>
             <h2>Regular · The lock</h2>
-            <p>Restore the generator and medical filter. Collect four guarded code fragments, then enter their digits at the red exit. Defeat the boss, find the car key and reach the car. Eight rooms contain puzzles and salvage.</p>
+            <p>Restore the generator and medical filter. Collect four guarded code fragments, then enter their digits at the red exit. Defeat the boss, find the car key and reach the car. Thirteen rooms contain puzzles, salvage, journals and supplies.</p>
         </section>
         <section>
             <h2>Halloween · The hunt</h2>
@@ -116,7 +147,7 @@
         </section>
         <section>
             <h2>Field tips · Survive</h2>
-            <p>Health pickups restore 25 points; ⚡ boosts speed for 6.5 seconds. Buy reinforced armor or sprint modules in the safe room. Press <strong>E</strong> at a closet to hide. The office corridors lead to eight furnished rooms, but hunters patrol inside and chase you out. Watch the radar, use cover, and fight back for credits. Find the faded yellow wall, then follow the green radar marker. The gold ? marks a note—press <strong>E</strong> near it to read the clue. Enter <strong>1234</strong> at the green keypad to claim the lightsaber. Move with <strong>WASD</strong>, attack with <strong>CLICK</strong>/<strong>G</strong>/<strong>SPACE</strong>, switch weapons with <strong>V</strong>, and use the car with <strong>F</strong>.</p>
+            <p>Health pickups restore 25 points; ⚡ boosts speed for 6.5 seconds. Buy reinforced armor or sprint modules in the safe room. Press <strong>E</strong> at a closet to hide. The office corridors lead to thirteen furnished rooms, but hunters patrol inside and chase you out. Watch the radar, use cover, and fight back for credits. Find the faded yellow wall, then follow the green radar marker. The gold ? marks a note—press <strong>E</strong> near it to read the clue. Enter <strong>1234</strong> at the green keypad to claim the lightsaber. Move with <strong>WASD</strong>, attack with <strong>CLICK</strong>/<strong>G</strong>/<strong>SPACE</strong>, switch weapons with <strong>V</strong>, and use the car with <strong>F</strong>.</p>
         </section>
     </div>
 </div>
@@ -125,6 +156,7 @@
     <form class="puzzle-card" id="doorPuzzleForm">
         <h2 id="puzzleTitle">HUMAN CHECK</h2>
         <p id="puzzlePrompt">Quick check: what is 2 + 3? Enter the number to prove you are not a robot.</p>
+        <div id="puzzleTools" class="puzzle-tools"></div>
         <label for="doorCodeInput" id="puzzleLabel">Answer</label><br><br>
         <input id="doorCodeInput" type="text" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" autocomplete="off" aria-describedby="puzzleFeedback" required>
         <div class="keypad-buttons" aria-label="Keypad">
